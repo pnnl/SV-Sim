@@ -256,7 +256,6 @@ public:
         SAFE_FREE_HOST(sv_imag_cpu);
 
         SAFE_FREE_GPU(sim_gpu);
-        SAFE_FREE_GPU(circuit_handle_gpu);
     }
     void AllocateQubit()
     {
@@ -506,7 +505,11 @@ public:
     }
     ValType sim()
     {
+        //printf("before update is n_qubits: %lu, n_gates: %lu\n",n_qubits, n_gates);
+
         update(circuit_handle->n_qubits, circuit_handle->n_gates);
+        
+        //printf("after update is n_qubits: %lu, n_gates: %lu\n",n_qubits, n_gates);
 
         //printf("\n======Before========\n");
         //print_res_sv();
@@ -541,6 +544,8 @@ public:
         cudaSafeCall(cudaMemcpy(&res_prob, m_real, sizeof(ValType), cudaMemcpyDeviceToHost));
         cudaSafeCall(cudaDeviceSynchronize());
 
+        reset_circuit();
+
 #ifdef PRINT_MEA_PER_CIRCUIT
         printf("\n============== SVsim ===============\n");
         printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
@@ -548,8 +553,40 @@ public:
                 sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024, res_prob);
         printf("=====================================\n");
 #endif
+
+        cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
+        cudaSafeCall(cudaMemcpy(sv_imag_cpu, sv_imag, sv_size, cudaMemcpyDeviceToHost));
+
+        //printf("after kernel is n_qubits: %lu, n_gates: %lu\n",n_qubits, n_gates);
         return res_prob;
     }
+
+    IdxType* measurement(unsigned repetition=10)
+    {
+        cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
+        cudaSafeCall(cudaMemcpy(sv_imag_cpu, sv_imag, sv_size, cudaMemcpyDeviceToHost));
+        //accumulate for sampling
+        ValType* sv_scan = NULL;
+        SAFE_ALOC_HOST(sv_scan, (dim+1)*sizeof(ValType));
+        sv_scan[0] = 0;
+        for (IdxType i=1; i<dim+1; i++)
+            sv_scan[i] = sv_scan[i-1]+(sv_real_cpu[i-1]*sv_real_cpu[i-1]);
+        srand(RAND_SEED);
+        IdxType* res_state = new IdxType[repetition];
+        memset(res_state, 0, (repetition*sizeof(IdxType)));
+        for (unsigned i=0; i<repetition; i++)
+        {
+            ValType r = (ValType)rand()/(ValType)RAND_MAX;
+            for (IdxType j=0; j<dim; j++)
+                if (sv_scan[j]<=r && r<sv_scan[j+1])
+                    res_state[i] = j;
+        }
+        if ( abs(sv_scan[dim] - 1.0) > ERROR_BAR )
+            printf("Sum of probability is far from 1.0 with %lf\n", sv_scan[dim]);
+        SAFE_FREE_HOST(sv_scan);
+        return res_state;
+    }
+
     void print_res_sv()
     {
         cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
@@ -750,8 +787,8 @@ __device__ __inline__ void T_GATE(const Gate* g, const Simulation* sim, ValType*
 
 //============== RI Gate ================
 //Rotate around the Pauli-I, it applies a global phase of theta/2.
-//and maps |1> to e^{-i theta/2}|1>
-/** R = [1 0]
+//and maps 1 to e^{-i theta/2}|1>
+/** RI = [cos(theta/2)-i*sin(theta/2) 0]
         [0 cos(theta/2)-i*sin(theta/2)]
 */
 __device__ __inline__ void RI_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -761,8 +798,12 @@ __device__ __inline__ void RI_GATE(const Gate* g, const Simulation* sim, ValType
     ValType ri_real = cos(theta/2.0);
     ValType ri_imag = -sin(theta/2.0);
     OP_HEAD;
+    const ValType el0_real = sv_real[pos0]; 
+    const ValType el0_imag = sv_imag[pos0];
     const ValType el1_real = sv_real[pos1]; 
     const ValType el1_imag = sv_imag[pos1];
+    sv_real[pos0] = (el0_real * ri_real) - (el0_imag * ri_imag);
+    sv_imag[pos0] = (el0_real * ri_imag) + (el0_imag * ri_real);
     sv_real[pos1] = (el1_real * ri_real) - (el1_imag * ri_imag);
     sv_imag[pos1] = (el1_real * ri_imag) + (el1_imag * ri_real);
     OP_TAIL;
@@ -770,6 +811,9 @@ __device__ __inline__ void RI_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== RX Gate ================
 //Rotation around X-axis
+/** RX = [cos(theta/2), -i*sin(theta/2)]
+        [-i*sin(theta/2), cos(theta/2)]
+*/
 __device__ __inline__ void RX_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
     const IdxType qubit = g->qubit; 
@@ -790,6 +834,9 @@ __device__ __inline__ void RX_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== RY Gate ================
 //Rotation around Y-axis
+/** RX = [cos(theta/2), -sin(theta/2)]
+        [sin(theta/2), cos(theta/2)]
+*/
 __device__ __inline__ void RY_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
     const IdxType qubit = g->qubit; 
@@ -812,22 +859,35 @@ __device__ __inline__ void RY_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== RZ Gate ================
 //Rotation around Z-axis
+/** RZ = [cos(theta/2)-i*sin(theta/2) 0]
+        [0 cos(theta/2)+i*sin(theta/2)]
+**/
+
 __device__ __inline__ void RZ_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
     const IdxType qubit = g->qubit; 
     const ValType theta = g->theta; 
-    ValType e3_real = cos(theta);
-    ValType e3_imag = sin(theta);
+
+    ValType e0_real = cos(theta/2);
+    ValType e0_imag = -sin(theta/2);
+    ValType e3_real = cos(theta/2);
+    ValType e3_imag = sin(theta/2);
     OP_HEAD;
+    const ValType el0_real = sv_real[pos0]; 
+    const ValType el0_imag = sv_imag[pos0];
     const ValType el1_real = sv_real[pos1]; 
     const ValType el1_imag = sv_imag[pos1];
-    sv_real[pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
-    sv_imag[pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    sv_real[pos0] = (el0_real * e0_real) - (el0_imag * e0_imag);
+    sv_imag[pos0] = (el0_real * e0_imag) + (el0_imag * e0_real);
+    sv_real[pos1] = (el1_real * e3_real) - (el1_imag * e3_imag);
+    sv_imag[pos1] = (el1_real * e3_imag) + (el1_imag * e3_real);
     OP_TAIL;
 }
 
 //============== EI Gate ================
-//Exponential single qubit gate at Paulti-I
+//Exponential single qubit gate at Paulti-I, 
+// [1,0] cos(theta) + i [1,0] sin(theta)
+// [0,1]                [0,1]
 // Exp-I = [cos(t)+i*sin(t),  0]
 //       = [0, cos(t)+i*sin(t)  ]
 __device__ __inline__ void EI_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -852,6 +912,8 @@ __device__ __inline__ void EI_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== EX Gate ================
 //Exponential single qubit gate at Paulti-X
+// [1,0] cos(theta) + i [0,1] sin(theta)
+// [0,1]                [1,0]
 // Exp-X = [cos(t),  i*sin(t)]
 //       = [i*sin(t), cos(t) ]
 __device__ __inline__ void EX_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -876,6 +938,8 @@ __device__ __inline__ void EX_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== EY Gate ================
 //Exponential single qubit gate at Paulti-Y
+// [1,0] cos(theta) + i [0,-i] sin(theta)
+// [0,1]                [i,0]
 // Exp-Y = [cos(t), sin(t)]
 //       = [-sin(t), cos(t) ]
 __device__ __inline__ void EY_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -900,6 +964,8 @@ __device__ __inline__ void EY_GATE(const Gate* g, const Simulation* sim, ValType
 
 //============== EZ Gate ================
 //Exponential single qubit gate at Paulti-Z
+// [1,0] cos(theta) + i [1,0] sin(theta)
+// [0,1]                [0,-1]
 // Exp-Z = [cos(t)+i*sin(t), 0]
 //       = [0, cos(t)-i*sin(t)]
 __device__ __inline__ void EZ_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -1039,8 +1105,8 @@ __device__ __inline__ void ControlledT_GATE(const Gate* g, const Simulation* sim
 
 //============== Controlled RI Gate ================
 //Rotate around the Pauli-I, it applies a global phase of theta/2.
-//and maps |1> to e^{-i theta/2}|1>
-/** R = [1 0]
+//and maps 1 to e^{-i theta/2}|1>
+/** RI = [cos(theta/2)-i*sin(theta/2) 0]
         [0 cos(theta/2)-i*sin(theta/2)]
 */
 __device__ __inline__ void ControlledRI_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -1051,8 +1117,12 @@ __device__ __inline__ void ControlledRI_GATE(const Gate* g, const Simulation* si
     ValType ri_real = cos(theta/2.0);
     ValType ri_imag = -sin(theta/2.0);
     OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0]; 
+    const ValType el0_imag = sv_imag[pos0];
     const ValType el1_real = sv_real[pos1]; 
     const ValType el1_imag = sv_imag[pos1];
+    sv_real[pos0] = (el0_real * ri_real) - (el0_imag * ri_imag);
+    sv_imag[pos0] = (el0_real * ri_imag) + (el0_imag * ri_real);
     sv_real[pos1] = (el1_real * ri_real) - (el1_imag * ri_imag);
     sv_imag[pos1] = (el1_real * ri_imag) + (el1_imag * ri_real);
     OP_TAIL;
@@ -1109,13 +1179,19 @@ __device__ __inline__ void ControlledRZ_GATE(const Gate* g, const Simulation* si
     const IdxType qubit = g->qubit; 
     const IdxType mask = g->mask; 
     const ValType theta = g->theta; 
-    ValType e3_real = cos(theta);
-    ValType e3_imag = sin(theta);
+    ValType e0_real = cos(theta/2);
+    ValType e0_imag = -sin(theta/2);
+    ValType e3_real = cos(theta/2);
+    ValType e3_imag = sin(theta/2);
     OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0]; 
+    const ValType el0_imag = sv_imag[pos0];
     const ValType el1_real = sv_real[pos1]; 
     const ValType el1_imag = sv_imag[pos1];
-    sv_real[pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
-    sv_imag[pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    sv_real[pos0] = (el0_real * e0_real) - (el0_imag * e0_imag);
+    sv_imag[pos0] = (el0_real * e0_imag) + (el0_imag * e0_real);
+    sv_real[pos1] = (el1_real * e3_real) - (el1_imag * e3_imag);
+    sv_imag[pos1] = (el1_real * e3_imag) + (el1_imag * e3_real);
     OP_TAIL;
 }
 
@@ -1355,6 +1431,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         AdjointS_GATE(sim, sv_real, sv_imag, qubit);
         H_GATE(sim, sv_real, sv_imag, qubit);
     }
+
     for (IdxType i = tid; i<(sim->dim); i+=blockDim.x*gridDim.x)
     {
         if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
@@ -1367,7 +1444,6 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
             m_real[i] = (sv_real[i]*sv_real[i]) + (sv_imag[i]*sv_imag[i]);
         }
     }
-    //if (tid <100) printf("m_real[%d] is:%lf\n",tid,m_real[tid]);
     grid.sync();
     for (IdxType k=(sim->half_dim); k>0; k>>=1)
     {
@@ -1379,18 +1455,22 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     }
 
     grid.sync();
-    //assert(m_real[0] <= 1.2);
-
-    if(tid == 0 && m_real[0] > 1.1) 
-        printf("!!!!!!!! probability %lf is too large!!!!!!\n", m_real[0]);
+    //if (tid ==0 ) printf("m_real[%d] is:%lf\n",tid,m_real[tid]);
+    ValType prob_of_one = m_real[0];
+    grid.sync();
 
     //Now m_real[0] should have the probability of being 1
-    bool val = (rand < m_real[0]);
-
+    bool val = (rand < prob_of_one);
+    
     if (val) // we get 1, so we set all entires with (id&mask==0) to 0, and scale entires with (id&mask==1) by factor
     {
-        ValType factor = (m_real[0] == 0) ? 1. : 1./sqrt(m_real[0]); //we compute 1/sqrt(prob), so other entries can times this val
+        //ValType factor = (prob_of_one == 0) ? 1. : 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+        ValType factor = 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+
         //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
+
+        //if (tid ==0 ) printf("m_real[0]:%lf, factor:%lf",m_real[0], factor);
+
         for (IdxType i = tid; i<(sim->dim); i+=blockDim.x*gridDim.x)
         {
             if ( (i & mask) == 0)
@@ -1400,30 +1480,32 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
             }
             else
             {
-                sv_real[i] *= factor;
-                sv_imag[i] *= factor;
+                sv_real[i] = sv_real[i] * factor;
+                sv_imag[i] = sv_imag[i] * factor;
             }
         }
     }
     else // we get 0, so we set all entires with (id&mask!=0) to 0, and scale entires with (id&mask==0) by factor
     {
-        ValType factor = (m_real[0] == 1) ? 1. : 1./sqrt(1.-m_real[0]); //we compute 1/sqrt(prob), so other entries can times this val
+        //ValType factor = (prob_of_one == 1) ? 1. : 1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
         //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
+        ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
 
         for (IdxType i = tid; i<(sim->dim); i+=blockDim.x*gridDim.x)
         {
-            if ( (i & mask) != 0)
+            if ( (i & mask) == 0)
+            {
+                sv_real[i] = sv_real[i] * factor;
+                sv_imag[i] = sv_imag[i] * factor;
+            }
+            else
             {
                 sv_real[i] = 0.;
                 sv_imag[i] = 0.;
             }
-            else
-            {
-                sv_real[i] *= factor;
-                sv_imag[i] *= factor;
-            }
         }
     }
+
     grid.sync();
     if (pauli == 1)
     {

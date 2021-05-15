@@ -25,7 +25,7 @@
 namespace SVSim 
 {
 //Number of max qubits
-#define N_QUBIT_SLOT 30
+#define N_QUBIT_SLOT 28
 //Which GPU
 #define I_GPU 0
 //Random seed
