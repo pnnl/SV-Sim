@@ -165,7 +165,7 @@ public:
     }
     void ReleaseQubit()
     {
-        n_qubits--;
+        --n_qubits;
         //printf("release 1 qubit, now in total: %lu\n", n_qubits);
     }
     void clear()
@@ -259,10 +259,12 @@ public:
     }
     void AllocateQubit()
     {
+        //printf("allocate 1 qubit, now in total: %lu\n",n_qubits);
         circuit_handle->AllocateQubit();
     }
     void ReleaseQubit(IdxType qubit)
     {
+        //printf("release 1 qubit at: %lu\n", qubit);
     }
     void launchGatePointers()
     {
@@ -473,7 +475,9 @@ public:
     // =============================== End of Gate Define ===================================
     void reset()
     {
-        for (IdxType i=0; i<circuit_handle->n_qubits; i++)
+        //printf("%lu qubits are to be released in reset\n", circuit_handle->n_qubits);
+        IdxType qubits_to_release = circuit_handle->n_qubits;
+        for (IdxType i=0; i<qubits_to_release; i++)
             circuit_handle->ReleaseQubit();
         //Reset CPU input & output
         memset(sv_real_cpu, 0, sv_size);
@@ -489,6 +493,7 @@ public:
     void reset_circuit()
     {
         circuit_handle->clear();
+        //printf("Circuit is reset!\n");
     }
     void update(const IdxType _n_qubits, const IdxType _n_gates)
     {
@@ -554,8 +559,9 @@ public:
         printf("=====================================\n");
 #endif
 
-        cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
-        cudaSafeCall(cudaMemcpy(sv_imag_cpu, sv_imag, sv_size, cudaMemcpyDeviceToHost));
+        //cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
+        //cudaSafeCall(cudaMemcpy(sv_imag_cpu, sv_imag, sv_size, cudaMemcpyDeviceToHost));
+        //print_res_sv();
 
         //printf("after kernel is n_qubits: %lu, n_gates: %lu\n",n_qubits, n_gates);
         return res_prob;
@@ -1455,6 +1461,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     }
 
     grid.sync();
+
     //if (tid ==0 ) printf("m_real[%d] is:%lf\n",tid,m_real[tid]);
     ValType prob_of_one = m_real[0];
     grid.sync();
@@ -1467,6 +1474,14 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         //ValType factor = (prob_of_one == 0) ? 1. : 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
         ValType factor = 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
 
+        //assert(factor > 0);
+
+        //ValType factor = 1./sqrt(1-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+
+
+
+        //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
+        
         //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
 
         //if (tid ==0 ) printf("m_real[0]:%lf, factor:%lf",m_real[0], factor);
@@ -1488,8 +1503,13 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     else // we get 0, so we set all entires with (id&mask!=0) to 0, and scale entires with (id&mask==0) by factor
     {
         //ValType factor = (prob_of_one == 1) ? 1. : 1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
-        //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
+        //ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+
         ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+
+        //assert(factor > 0);
+
+        //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
 
         for (IdxType i = tid; i<(sim->dim); i+=blockDim.x*gridDim.x)
         {
