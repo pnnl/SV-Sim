@@ -57,7 +57,6 @@ public:
         res_sv = NULL;
         //sim = new Simulation(0, I_GPU);
         sim = new Simulation();
-        rerun = true;
         //std::srand(RAND_SEED);
         std::srand(time(0));
     }
@@ -84,11 +83,9 @@ public:
     {
         nextQubitId--;
         sim->ReleaseQubit(to_qubit(Q));
-        if (nextQubitId == 0)
-        {
-            sim->reset();
-            rerun = true;
-        }
+        
+        //printf("release 1 qubit at %lu, now in total: %lu\n", to_qubit(Q), nextQubitId);
+        if (nextQubitId == 0) sim->reset();
     }
     void ReleaseResult(Result result) override {} 
 
@@ -267,9 +264,6 @@ public:
             case PauliId_Y: pauli = 2; break;
         }
 
-        if (rerun) rerun = false;
-        else sim->reset_circuit();
-
         sim->Measure(target, rand, pauli);
         ValType prob_of_one = sim->sim();
         //printf("\n======After========\n");
@@ -283,7 +277,6 @@ private:
     Simulation* sim;
     IdxType* res_sv;
     IdxType nextQubitId;
-    bool rerun;
 };
 
 extern "C" Microsoft::Quantum::IRuntimeDriver* GetSVSim() 

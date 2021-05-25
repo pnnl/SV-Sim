@@ -29,7 +29,7 @@
 //#include "noise_gate_DP_0.98.cuh"
 //#include "noise_gate_DP_0.99.cuh"
 //#include "noise_gate_BCSZ_0.98.cuh"
-#include "noise_gate_BCSZ_0.99.cuh"
+//#include "noise_gate_BCSZ_0.99.cuh"
 
 #include "config.hpp"
 
@@ -267,9 +267,11 @@ public:
     void AllocateQubit()
     {
         circuit_handle->AllocateQubit();
+        //printf("allocate 1 qubit, now in total: %lu\n",circuit_handle->n_qubits);
     }
     void ReleaseQubit(IdxType qubit)
     {
+        //printf("release 1 qubit at %lu, now in total: %lu\n", qubit, circuit_handle->n_qubits);
     }
     void launchGatePointers()
     {
@@ -480,9 +482,10 @@ public:
     // =============================== End of Gate Define ===================================
     void reset()
     {
-
-        for (IdxType i=0; i<circuit_handle->n_qubits; i++)
+        IdxType qubits_to_release = circuit_handle->n_qubits;
+        for (IdxType i=0; i<qubits_to_release; i++)
             circuit_handle->ReleaseQubit();
+
         //Reset CPU input & output
         memset(sv_real_cpu, 0, sv_size);
         memset(sv_imag_cpu, 0, sv_size);
@@ -1860,58 +1863,58 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
 
 __device__ void X_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
-    //X_GATE(sim, sv_real, sv_imag, g->qubit); 
-    //X_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+    X_GATE(sim, sv_real, sv_imag, g->qubit); 
+    X_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
 
-    ///*
+    /*
     C2_GATE(sim, sv_real, sv_imag, XR0,XI0, XR1,XI1, XR2,XI2, XR3,XI3,
                                    XR4,XI4, XR5,XI5, XR6,XI6, XR7,XI7,
                                    XR8,XI8, XR9,XI9, XR10,XI10, XR11,XI11,
                                    XR12,XI12, XR13,XI13, XR14,XI14, XR15,XI15,
             g->qubit, (g->qubit)+(sim->n_qubits));
-    //*/
+     */
 }
 
 __device__ void Y_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
-    //Y_GATE(sim, sv_real, sv_imag, g->qubit); 
-    //ConjugateY_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+    Y_GATE(sim, sv_real, sv_imag, g->qubit); 
+    ConjugateY_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
 
-    ///*
+    /*
     C2_GATE(sim, sv_real, sv_imag, YR0,YI0, YR1,YI1, YR2,YI2, YR3,YI3,
                                    YR4,YI4, YR5,YI5, YR6,YI6, YR7,YI7,
                                    YR8,YI8, YR9,YI9, YR10,YI10, YR11,YI11,
                                    YR12,YI12, YR13,YI13, YR14,YI14, YR15,YI15,
             g->qubit, (g->qubit)+(sim->n_qubits));
-    //*/
+     */
 }
 
 __device__ void Z_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
-    //Z_GATE(sim, sv_real, sv_imag, g->qubit); 
-    //Z_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+    Z_GATE(sim, sv_real, sv_imag, g->qubit); 
+    Z_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
 
-    ///*
+    /*
     C2_GATE(sim, sv_real, sv_imag, ZR0,ZI0, ZR1,ZI1, ZR2,ZI2, ZR3,ZI3,
                                    ZR4,ZI4, ZR5,ZI5, ZR6,ZI6, ZR7,ZI7,
                                    ZR8,ZI8, ZR9,ZI9, ZR10,ZI10, ZR11,ZI11,
                                    ZR12,ZI12, ZR13,ZI13, ZR14,ZI14, ZR15,ZI15,
             g->qubit, (g->qubit)+(sim->n_qubits));
-    //*/
+     */
 }
 
 __device__ void H_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
-    //H_GATE(sim, sv_real, sv_imag, g->qubit); 
-    //H_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+    H_GATE(sim, sv_real, sv_imag, g->qubit); 
+    H_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
     
-    ///*
+    /*
     C2_GATE(sim, sv_real, sv_imag, HR0,HI0, HR1,HI1, HR2,HI2, HR3,HI3,
                                    HR4,HI4, HR5,HI5, HR6,HI6, HR7,HI7,
                                    HR8,HI8, HR9,HI9, HR10,HI10, HR11,HI11,
                                    HR12,HI12, HR13,HI13, HR14,HI14, HR15,HI15,
             g->qubit, (g->qubit)+(sim->n_qubits));
-    //*/
+     */
 }
 
 __device__ void S_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
