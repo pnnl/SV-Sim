@@ -1,0 +1,15 @@
+#!/bin/bash
+#BSUB -P ###
+#BSUB -W 1
+#BSUB -nnodes 1
+#BSUB -o out_cc.txt -e err_cc.txt
+
+module load cuda/10.1.243
+module load spectrum-mpi
+
+export LD_LIBRARY_PATH=/autofs/nccs-svm1_sw/summit/cuda/10.1.243/lib64/:$LD_LIBRARY_PATH
+date
+
+#GPU-Direct
+jsrun -n 4 -a 1 -g 1 -c 1 --smpiargs="-gpu" ./dmsim_mpi
+
