@@ -19,7 +19,7 @@
 #include <assert.h>
 #include <cooperative_groups.h>
 #include <vector>
-#include <omp.h>
+#include <mpi.h>
 #include <sstream>
 #include <string>
 #include <iostream>
@@ -220,7 +220,7 @@ class Simulation
 public:
     Simulation(IdxType _n_qubits=N_QUBIT_SLOT) : 
         comm_global(MPI_COMM_WORLD),
-        n_qubits(_n_qubits)
+        n_qubits(_n_qubits),
         dim((IdxType)1<<(n_qubits)), 
         half_dim((IdxType)1<<(n_qubits-1)),
         sv_size(dim*(IdxType)sizeof(ValType)),
@@ -318,6 +318,7 @@ public:
     }
     void launchGatePointers()
     {
+        cudaSafeCall(cudaSetDevice(0));
         cudaSafeCall(cudaMemcpyFromSymbol(&gX, pX, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gY, pY, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gZ, pZ, sizeof(func_t))); 
@@ -579,6 +580,8 @@ public:
         //printf("\n======Before========\n");
         //print_res_sv();
         //printf("\n==============\n");
+        
+        //printf("n_qubits: %llu, n_gates: %llu\n",n_qubits, n_gates);
 
         circuit_handle_gpu = circuit_handle->upload();
         cudaSafeCall(cudaMemcpy(sim_gpu, this, 
@@ -587,7 +590,7 @@ public:
         gpu_timer sim_timer;
         dim3 gridDim(1,1,1);
         cudaDeviceProp deviceProp;
-        cudaSafeCall(cudaGetDeviceProperties(&deviceProp, i_gpu));
+        cudaSafeCall(cudaGetDeviceProperties(&deviceProp, 0));
         int numBlocksPerSm;
         cudaSafeCall(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, 
                     simulation_kernel, THREADS_PER_BLOCK, 0));
@@ -603,7 +606,7 @@ public:
         sim_timer.stop_timer();
 
         cudaCheckError();
-        double sim_time = sim_timer.measure();
+        sim_time = sim_timer.measure();
 
         MPI_Gather(&sim_time, 1, MPI_DOUBLE,
                 &sim_times[i_gpu], 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -612,7 +615,7 @@ public:
         //Copy back
         cudaSafeCall(cudaMemcpy(&res_prob, m_real, sizeof(ValType), cudaMemcpyDeviceToHost));
         cudaSafeCall(cudaDeviceSynchronize());
-
+        MPI_Bcast(&res_prob, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
 
         if (i_gpu ==0)
@@ -634,6 +637,7 @@ public:
 
             SAFE_FREE_HOST(sim_times);
         }
+
         reset_circuit();
 
         //cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size_per_gpu, cudaMemcpyDeviceToHost));
@@ -741,6 +745,12 @@ public:
     IdxType n_qubits;
     // which gpu
     IdxType i_gpu;
+    IdxType gpu_scale;
+    IdxType n_gpus;
+    IdxType lg2_m_gpu;
+    IdxType m_gpu;
+    IdxType sv_size_per_gpu;
+
     // gpu_scale is 2^x of the number of GPUs, e.g., with 8 GPUs the gpu_scale is 3 (2^3=8)
     IdxType dim;
     IdxType half_dim;
@@ -1651,6 +1661,23 @@ __device__ __inline__ void S_GATE(const Simulation* sim, ValType* sv_real, ValTy
     OP_TAIL;
 }
 
+   /*
+    //for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work; i+=blockDim.x*gridDim.x)
+    if (sim->i_gpu == 0)
+    {
+        for (IdxType i=tid; i<sim->dim; i+=blockDim.x*gridDim.x)
+        {
+            if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
+            {
+                PGAS_P(m_real,i,0.);
+            }
+            else
+            {
+                PGAS_P(m_real,i, (sv_real[i]*sv_real[i]) + (sv_imag[i]*sv_imag[i]));
+            }
+        }
+    }
+    */
 
 
 //============== Measurement Gate ================
@@ -1686,7 +1713,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         AdjointS_GATE(sim, sv_real, sv_imag, qubit);
         H_GATE(sim, sv_real, sv_imag, qubit);
     }
-
+ 
     for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work; i+=blockDim.x*gridDim.x)
     {
         if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
@@ -1698,7 +1725,10 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
             PGAS_P(m_real,i, (sv_real[i]*sv_real[i]) + (sv_imag[i]*sv_imag[i]));
         }
     }
+
     BARRIER;
+
+
     for (IdxType k=(sim->half_dim); k>0; k>>=1)
     {
         for (IdxType i=(sim->i_gpu)*blockDim.x*gridDim.x+tid; i<k; 
@@ -1706,13 +1736,26 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         {
             ValType a = PGAS_G(m_real, i);
             ValType b = PGAS_G(m_real, i+k);
-            PGAS_P(m_real,a+b);
+            PGAS_P(m_real,i,a+b);
         }
         BARRIER;
     }
-    BARRIER;
+
     //if (tid ==0 ) printf("m_real[%d] is:%lf\n",tid,m_real[tid]);
-    ValType prob_of_one = PGAS_G(m_real,0);
+
+
+    BARRIER;
+
+
+    //ValType prob_of_one = PGAS_G(m_real,0);
+
+    if (tid == 0) m_real[0] = PGAS_G(m_real,0);
+    grid.sync();
+    ValType prob_of_one = m_real[0];
+
+
+
+
     BARRIER;
 
     //Now m_real[0] should have the probability of being 1
