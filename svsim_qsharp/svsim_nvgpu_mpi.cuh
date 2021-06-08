@@ -1792,7 +1792,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         //if (tid == 0 ) printf("qubit:%lu, prob:%lf, mask:%lu, m0:%lf, factor:%lf, dim:%lu, half-dim:%lu \n",qubit, rand, mask, m_real[0], factor, sim->dim, sim->half_dim);
         ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
 
-        for (IdxType i = tid; i<(sim->dim); i+=blockDim.x*gridDim.x)
+        for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work; i+=blockDim.x*gridDim.x)
         {
             if ( (i & mask) == 0)
             {

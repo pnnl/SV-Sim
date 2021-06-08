@@ -24,6 +24,13 @@
 #include <iostream>
 #include <cuda.h>
 
+//#include "noise_gate_AD_0.98.cuh"
+//#include "noise_gate_AD_0.99.cuh"
+//#include "noise_gate_DP_0.98.cuh"
+//#include "noise_gate_DP_0.99.cuh"
+//#include "noise_gate_BCSZ_0.98.cuh"
+//#include "noise_gate_BCSZ_0.99.cuh"
+
 #include "config.hpp"
 
 namespace SVSim
@@ -729,14 +736,15 @@ public:
     }
     void update(const IdxType _n_qubits, const IdxType _n_gates)
     {
-        assert(_n_qubits < N_QUBIT_SLOT);
+        assert(_n_qubits <= (N_QUBIT_SLOT/2));
+        //For density matrix, we need double the qubits
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(_n_qubits));
-        this->half_dim = (IdxType)1UL<<(_n_qubits-1UL);
+        this->dim = ((IdxType)1UL<<(2*n_qubits));
+        this->half_dim = (IdxType)1UL<<(2*n_qubits-1UL);
         this->sv_size = dim*(IdxType)sizeof(ValType);
-        this->lg2_m_gpu = _n_qubits - gpu_scale;
-        this->m_gpu = (IdxType)1<<(lg2_m_gpu);
+        this->lg2_m_gpu = 2*n_qubits - gpu_scale;
+        this->m_gpu = (IdxType)1UL<<(lg2_m_gpu);
         this->sv_size_per_gpu = sv_size/n_gpus;
     }
     std::string circuitToString()
@@ -987,9 +995,8 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
 /** X = [0 1]
         [1 0]
 */
-__device__ __inline__ void X_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void X_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1007,9 +1014,8 @@ __device__ __inline__ void X_GATE(const Gate* g, const Simulation* sim, ValType*
 /** Y = [0 -i]
         [i  0]
 */
-__device__ __inline__ void Y_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void Y_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1022,14 +1028,33 @@ __device__ __inline__ void Y_GATE(const Gate* g, const Simulation* sim, ValType*
     OP_TAIL;
 }
 
+
+//============== ConjugateY Gate ================
+/** ConjugateY = [0 i]
+                 [-i  0]
+*/
+__device__ __inline__ void ConjugateY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
+{
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = -el1_imag; 
+    sv_imag[pos0_gid][pos0] = el1_real;
+    sv_real[pos1_gid][pos1] = el0_imag;
+    sv_imag[pos1_gid][pos1] = -el0_real;
+    OP_TAIL;
+}
+
+
 //============== Z Gate ================
 //Pauli gate: phase flip
 /** Z = [1  0]
         [0 -1]
 */
-__device__ __inline__ void Z_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void Z_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1043,9 +1068,8 @@ __device__ __inline__ void Z_GATE(const Gate* g, const Simulation* sim, ValType*
 /** H = 1/sqrt(2) * [1  1]
                     [1 -1]
 */
-__device__ __inline__ void H_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void H_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1063,9 +1087,8 @@ __device__ __inline__ void H_GATE(const Gate* g, const Simulation* sim, ValType*
 /** S = [1 0]
         [0 i]
 */
-__device__ __inline__ void S_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void S_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1079,9 +1102,8 @@ __device__ __inline__ void S_GATE(const Gate* g, const Simulation* sim, ValType*
 /** T = [1 0]
         [0 s2i+s2i*i]
 */
-__device__ __inline__ void T_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void T_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1096,10 +1118,8 @@ __device__ __inline__ void T_GATE(const Gate* g, const Simulation* sim, ValType*
 /** RI = [cos(theta/2)-i*sin(theta/2) 0]
         [0 cos(theta/2)-i*sin(theta/2)]
 */
-__device__ __inline__ void RI_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void RI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     ValType ri_real = cos(theta/2.0);
     ValType ri_imag = -sin(theta/2.0);
     OP_HEAD;
@@ -1114,15 +1134,36 @@ __device__ __inline__ void RI_GATE(const Gate* g, const Simulation* sim, ValType
     OP_TAIL;
 }
 
+//============== ConjugateRI Gate ================
+/** ConjugateRI = [cos(theta/2)+i*sin(theta/2) 0]
+                  [0 cos(theta/2)+i*sin(theta/2)]
+*/
+__device__ __inline__ void ConjugateRI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    ValType ri_real = cos(theta/2.0);
+    ValType ri_imag = sin(theta/2.0);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0]; 
+    const ValType el0_imag = sv_imag[pos0];
+    const ValType el1_real = sv_real[pos1]; 
+    const ValType el1_imag = sv_imag[pos1];
+    sv_real[pos0_gid][pos0] = (el0_real * ri_real) - (el0_imag * ri_imag);
+    sv_imag[pos0_gid][pos0] = (el0_real * ri_imag) + (el0_imag * ri_real);
+    sv_real[pos1_gid][pos1] = (el1_real * ri_real) - (el1_imag * ri_imag);
+    sv_imag[pos1_gid][pos1] = (el1_real * ri_imag) + (el1_imag * ri_real);
+    OP_TAIL;
+}
+
+
+
+
 //============== RX Gate ================
 //Rotation around X-axis
 /** RX = [cos(theta/2), -i*sin(theta/2)]
         [-i*sin(theta/2), cos(theta/2)]
 */
-__device__ __inline__ void RX_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void RX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     ValType rx_real = cos(theta/2.0);
     ValType rx_imag = -sin(theta/2.0);
     OP_HEAD;
@@ -1137,15 +1178,36 @@ __device__ __inline__ void RX_GATE(const Gate* g, const Simulation* sim, ValType
     OP_TAIL;
 }
 
+
+//============== ConjugateRX Gate ================
+/** ConjugateRX = [cos(theta/2), i*sin(theta/2)]
+                  [i*sin(theta/2), cos(theta/2)]
+*/
+__device__ __inline__ void ConjugateRX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    ValType rx_real = cos(theta/2.0);
+    ValType rx_imag = sin(theta/2.0);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (rx_real * el0_real) - (rx_imag * el1_imag);
+    sv_imag[pos0_gid][pos0] = (rx_real * el0_imag) + (rx_imag * el1_real);
+    sv_real[pos1_gid][pos1] =  - (rx_imag * el0_imag) +(rx_real * el1_real);
+    sv_imag[pos1_gid][pos1] =  + (rx_imag * el0_real) +(rx_real * el1_imag);
+    OP_TAIL;
+}
+
+
+
 //============== RY Gate ================
 //Rotation around Y-axis
 /** RX = [cos(theta/2), -sin(theta/2)]
         [sin(theta/2), cos(theta/2)]
 */
-__device__ __inline__ void RY_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void RY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     ValType e0_real = cos(theta/2.0);
     ValType e1_real = -sin(theta/2.0);
     ValType e2_real = sin(theta/2.0);
@@ -1168,11 +1230,8 @@ __device__ __inline__ void RY_GATE(const Gate* g, const Simulation* sim, ValType
         [0 cos(theta/2)+i*sin(theta/2)]
 **/
 
-__device__ __inline__ void RZ_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void RZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
-
     ValType e0_real = cos(theta/2);
     ValType e0_imag = -sin(theta/2);
     ValType e3_real = cos(theta/2);
@@ -1189,16 +1248,39 @@ __device__ __inline__ void RZ_GATE(const Gate* g, const Simulation* sim, ValType
     OP_TAIL;
 }
 
+//============== ConjugateRZ Gate ================
+/** ConjugateRZ = [cos(theta/2)+i*sin(theta/2) 0]
+                  [0 cos(theta/2)-i*sin(theta/2)]
+**/
+
+__device__ __inline__ void ConjugateRZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    ValType e0_real = cos(theta/2);
+    ValType e0_imag = sin(theta/2);
+    ValType e3_real = cos(theta/2);
+    ValType e3_imag = -sin(theta/2);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (el0_real * e0_real) - (el0_imag * e0_imag);
+    sv_imag[pos0_gid][pos0] = (el0_real * e0_imag) + (el0_imag * e0_real);
+    sv_real[pos1_gid][pos1] = (el1_real * e3_real) - (el1_imag * e3_imag);
+    sv_imag[pos1_gid][pos1] = (el1_real * e3_imag) + (el1_imag * e3_real);
+    OP_TAIL;
+}
+
+
+
 //============== EI Gate ================
 //Exponential single qubit gate at Paulti-I, 
 // [1,0] cos(theta) + i [1,0] sin(theta)
 // [0,1]                [0,1]
 // Exp-I = [cos(t)+i*sin(t),  0]
 //       = [0, cos(t)+i*sin(t)  ]
-__device__ __inline__ void EI_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void EI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e0_imag = sin(theta);
     const ValType e3_real = cos(theta);
@@ -1215,16 +1297,38 @@ __device__ __inline__ void EI_GATE(const Gate* g, const Simulation* sim, ValType
     OP_TAIL;
 } 
 
+//============== ConjugateEI Gate ================
+// [1,0] cos(theta) - i [1,0] sin(theta)
+// [0,1]                [0,1]
+// Exp-I = [cos(t)-i*sin(t),  0]
+//       = [0, cos(t)-i*sin(t)  ]
+__device__ __inline__ void ConjugateEI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e0_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    const ValType e3_imag = -sin(theta);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (e0_real * el0_real) - (e0_imag * el0_imag);
+    sv_imag[pos0_gid][pos0] = (e0_real * el0_imag) + (e0_imag * el0_real);
+    sv_real[pos1_gid][pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
+    sv_imag[pos1_gid][pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    OP_TAIL;
+} 
+
+
 //============== EX Gate ================
 //Exponential single qubit gate at Paulti-X
 // [1,0] cos(theta) + i [0,1] sin(theta)
 // [0,1]                [1,0]
 // Exp-X = [cos(t),  i*sin(t)]
 //       = [i*sin(t), cos(t) ]
-__device__ __inline__ void EX_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void EX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e1_imag = sin(theta);
     const ValType e2_imag = sin(theta);
@@ -1241,16 +1345,39 @@ __device__ __inline__ void EX_GATE(const Gate* g, const Simulation* sim, ValType
     OP_TAIL;
 }
 
+//============== ConjugateEX Gate ================
+// [1,0] cos(theta) - i [0,1] sin(theta)
+// [0,1]                [1,0]
+// Exp-X = [cos(t),  -i*sin(t)]
+//       = [-i*sin(t), cos(t) ]
+__device__ __inline__ void ConjugateEX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e1_imag = -sin(theta);
+    const ValType e2_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0];
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1];
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] =  (e0_real * el0_real) - (e1_imag * el1_imag);
+    sv_imag[pos0_gid][pos0] =  (e0_real * el0_imag) + (e1_imag * el1_real);
+    sv_real[pos1_gid][pos1] = -(e2_imag * el0_imag) + (e3_real * el1_real);
+    sv_imag[pos1_gid][pos1] =  (e2_imag * el0_real) + (e3_real * el1_imag);
+    OP_TAIL;
+}
+
+
+
 //============== EY Gate ================
 //Exponential single qubit gate at Paulti-Y
 // [1,0] cos(theta) + i [0,-i] sin(theta)
 // [0,1]                [i,0]
 // Exp-Y = [cos(t), sin(t)]
 //       = [-sin(t), cos(t) ]
-__device__ __inline__ void EY_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void EY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e1_real = sin(theta);
     const ValType e2_real = -sin(theta);
@@ -1273,14 +1400,35 @@ __device__ __inline__ void EY_GATE(const Gate* g, const Simulation* sim, ValType
 // [0,1]                [0,-1]
 // Exp-Z = [cos(t)+i*sin(t), 0]
 //       = [0, cos(t)-i*sin(t)]
-__device__ __inline__ void EZ_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void EZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e0_imag = sin(theta);
     const ValType e3_real = cos(theta);
     const ValType e3_imag = -sin(theta);
+    OP_HEAD;
+    const ValType el0_real = sv_real[pos0_gid][pos0];
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1];
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (e0_real * el0_real) - (e0_imag * el0_imag);
+    sv_imag[pos0_gid][pos0] = (e0_real * el0_imag) + (e0_imag * el0_real);
+    sv_real[pos1_gid][pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
+    sv_imag[pos1_gid][pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    OP_TAIL;
+}
+
+//============== ConjugateEZ Gate ================
+// [1,0] cos(theta) - i [1,0] sin(theta)
+// [0,1]                [0,-1]
+// Exp-Z = [cos(t)-i*sin(t), 0]
+//       = [0, cos(t)+i*sin(t)]
+__device__ __inline__ void ConjugateEZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e0_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    const ValType e3_imag = sin(theta);
     OP_HEAD;
     const ValType el0_real = sv_real[pos0_gid][pos0];
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1299,10 +1447,8 @@ __device__ __inline__ void EZ_GATE(const Gate* g, const Simulation* sim, ValType
 /** X = [0 1]
         [1 0]
 */
-__device__ __inline__ void ControlledX_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1320,10 +1466,8 @@ __device__ __inline__ void ControlledX_GATE(const Gate* g, const Simulation* sim
 /** Y = [0 -i]
         [i  0]
 */
-__device__ __inline__ void ControlledY_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1336,15 +1480,34 @@ __device__ __inline__ void ControlledY_GATE(const Gate* g, const Simulation* sim
     OP_TAIL;
 }
 
+
+//============== ControlledConjugateY Gate ================
+/** ConjugateY = [0 i]
+                 [-i  0]
+*/
+__device__ __inline__ void ControlledConjugateY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
+{
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = -el1_imag; 
+    sv_imag[pos0_gid][pos0] = el1_real;
+    sv_real[pos1_gid][pos1] = el0_imag;
+    sv_imag[pos1_gid][pos1] = -el0_real;
+    OP_TAIL;
+
+}
+
+
 //============== Controlled Z Gate ================
 //Pauli gate: phase flip
 /** Z = [1  0]
         [0 -1]
 */
-__device__ __inline__ void ControlledZ_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1358,10 +1521,8 @@ __device__ __inline__ void ControlledZ_GATE(const Gate* g, const Simulation* sim
 /** H = 1/sqrt(2) * [1  1]
                     [1 -1]
 */
-__device__ __inline__ void ControlledH_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledH_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1379,10 +1540,8 @@ __device__ __inline__ void ControlledH_GATE(const Gate* g, const Simulation* sim
 /** S = [1 0]
         [0 i]
 */
-__device__ __inline__ void ControlledS_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledS_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1396,10 +1555,8 @@ __device__ __inline__ void ControlledS_GATE(const Gate* g, const Simulation* sim
 /** T = [1 0]
         [0 s2i+s2i*i]
 */
-__device__ __inline__ void ControlledT_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledT_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1414,11 +1571,8 @@ __device__ __inline__ void ControlledT_GATE(const Gate* g, const Simulation* sim
 /** RI = [cos(theta/2)-i*sin(theta/2) 0]
         [0 cos(theta/2)-i*sin(theta/2)]
 */
-__device__ __inline__ void ControlledRI_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledRI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     ValType ri_real = cos(theta/2.0);
     ValType ri_imag = -sin(theta/2.0);
     OP_HEAD_MASK;
@@ -1433,13 +1587,32 @@ __device__ __inline__ void ControlledRI_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 }
 
+
+//============== ControlledConjugateRI Gate ================
+/** ControlledConjugateRI = [cos(theta/2)+i*sin(theta/2) 0]
+                            [0 cos(theta/2)+i*sin(theta/2)]
+*/
+__device__ __inline__ void ControlledConjugateRI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    ValType ri_real = cos(theta/2.0);
+    ValType ri_imag = sin(theta/2.0);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (el0_real * ri_real) - (el0_imag * ri_imag);
+    sv_imag[pos0_gid][pos0] = (el0_real * ri_imag) + (el0_imag * ri_real);
+    sv_real[pos1_gid][pos1] = (el1_real * ri_real) - (el1_imag * ri_imag);
+    sv_imag[pos1_gid][pos1] = (el1_real * ri_imag) + (el1_imag * ri_real);
+    OP_TAIL;
+}
+
+
 //============== Controlled RX Gate ================
 //Rotation around X-axis
-__device__ __inline__ void ControlledRX_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledRX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     ValType rx_real = cos(theta/2.0);
     ValType rx_imag = -sin(theta/2.0);
     OP_HEAD_MASK;
@@ -1454,13 +1627,30 @@ __device__ __inline__ void ControlledRX_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 }
 
+//============== ControlledConjugateRX Gate ================
+//Rotation around X-axis
+__device__ __inline__ void ControlledConjugateRX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    ValType rx_real = cos(theta/2.0);
+    ValType rx_imag = sin(theta/2.0);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (rx_real * el0_real) - (rx_imag * el1_imag);
+    sv_imag[pos0_gid][pos0] = (rx_real * el0_imag) + (rx_imag * el1_real);
+    sv_real[pos1_gid][pos1] =  - (rx_imag * el0_imag) +(rx_real * el1_real);
+    sv_imag[pos1_gid][pos1] =  + (rx_imag * el0_real) +(rx_real * el1_imag);
+    OP_TAIL;
+}
+
+
+
 //============== Controlled RY Gate ================
 //Rotation around Y-axis
-__device__ __inline__ void ControlledRY_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledRY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     ValType e0_real = cos(theta/2.0);
     ValType e1_real = -sin(theta/2.0);
     ValType e2_real = sin(theta/2.0);
@@ -1479,15 +1669,12 @@ __device__ __inline__ void ControlledRY_GATE(const Gate* g, const Simulation* si
 
 //==============Controlled RZ Gate ================
 //Rotation around Z-axis
-__device__ __inline__ void ControlledRZ_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledRZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
-    ValType e0_real = cos(theta/2);
-    ValType e0_imag = -sin(theta/2);
-    ValType e3_real = cos(theta/2);
-    ValType e3_imag = sin(theta/2);
+    ValType e0_real = cos(theta/2.0);
+    ValType e0_imag = -sin(theta/2.0);
+    ValType e3_real = cos(theta/2.0);
+    ValType e3_imag = sin(theta/2.0);
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0_gid][pos0]; 
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
@@ -1500,15 +1687,33 @@ __device__ __inline__ void ControlledRZ_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 }
 
+//==============ControlledConjugate RZ Gate ================
+//Rotation around Z-axis
+__device__ __inline__ void ControlledConjugateRZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    ValType e0_real = cos(theta/2.0);
+    ValType e0_imag = sin(theta/2.0);
+    ValType e3_real = cos(theta/2.0);
+    ValType e3_imag = -sin(theta/2.0);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (el0_real * e0_real) - (el0_imag * e0_imag);
+    sv_imag[pos0_gid][pos0] = (el0_real * e0_imag) + (el0_imag * e0_real);
+    sv_real[pos1_gid][pos1] = (el1_real * e3_real) - (el1_imag * e3_imag);
+    sv_imag[pos1_gid][pos1] = (el1_real * e3_imag) + (el1_imag * e3_real);
+    OP_TAIL;
+}
+
+
 //============== Controlled EI Gate ================
 //Exponential single qubit gate at Paulti-I
 // Exp-I = [cos(t)+i*sin(t),  0]
 //       = [0, cos(t)+i*sin(t)  ]
-__device__ __inline__ void ControlledEI_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledEI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e0_imag = sin(theta);
     const ValType e3_real = cos(theta);
@@ -1525,15 +1730,34 @@ __device__ __inline__ void ControlledEI_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 } 
 
+//============== ControlledConjugate EI Gate ================
+// Exp-I = [cos(t)-i*sin(t),  0]
+//       = [0, cos(t)-i*sin(t)  ]
+__device__ __inline__ void ControlledConjugateEI_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e0_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    const ValType e3_imag = -sin(theta);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (e0_real * el0_real) - (e0_imag * el0_imag);
+    sv_imag[pos0_gid][pos0] = (e0_real * el0_imag) + (e0_imag * el0_real);
+    sv_real[pos1_gid][pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
+    sv_imag[pos1_gid][pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    OP_TAIL;
+} 
+
+
 //============== Controlled EX Gate ================
 //Exponential single qubit gate at Paulti-X
 // Exp-X = [cos(t),  i*sin(t)]
 //       = [i*sin(t), cos(t) ]
-__device__ __inline__ void ControlledEX_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledEX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e1_imag = sin(theta);
     const ValType e2_imag = sin(theta);
@@ -1550,15 +1774,34 @@ __device__ __inline__ void ControlledEX_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 }
 
+//============== ControlledConjugate EX Gate ================
+// Exp-X = [cos(t),  -i*sin(t)]
+//       = [-i*sin(t), cos(t) ]
+__device__ __inline__ void ControlledConjugateEX_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e1_imag = -sin(theta);
+    const ValType e2_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0];
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1];
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] =  (e0_real * el0_real) - (e1_imag * el1_imag);
+    sv_imag[pos0_gid][pos0] =  (e0_real * el0_imag) + (e1_imag * el1_real);
+    sv_real[pos1_gid][pos1] = -(e2_imag * el0_imag) + (e3_real * el1_real);
+    sv_imag[pos1_gid][pos1] =  (e2_imag * el0_real) + (e3_real * el1_imag);
+    OP_TAIL;
+}
+
+
 //============== Controlled EY Gate ================
 //Exponential single qubit gate at Paulti-Y
 // Exp-Y = [cos(t), sin(t)]
 //       = [-sin(t), cos(t) ]
-__device__ __inline__ void ControlledEY_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledEY_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e1_real = sin(theta);
     const ValType e2_real = -sin(theta);
@@ -1579,11 +1822,8 @@ __device__ __inline__ void ControlledEY_GATE(const Gate* g, const Simulation* si
 //Exponential single qubit gate at Paulti-Z
 // Exp-Z = [cos(t)+i*sin(t), 0]
 //       = [0, cos(t)-i*sin(t)]
-__device__ __inline__ void ControlledEZ_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledEZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
-    const ValType theta = g->theta; 
     const ValType e0_real = cos(theta);
     const ValType e0_imag = sin(theta);
     const ValType e3_real = cos(theta);
@@ -1600,14 +1840,39 @@ __device__ __inline__ void ControlledEZ_GATE(const Gate* g, const Simulation* si
     OP_TAIL;
 }
 
+//============== ControlledConjugate EZ Gate ================
+// Exp-Z = [cos(t)-i*sin(t), 0]
+//       = [0, cos(t)+i*sin(t)]
+__device__ __inline__ void ControlledConjugateEZ_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
+{
+    const ValType e0_real = cos(theta);
+    const ValType e0_imag = -sin(theta);
+    const ValType e3_real = cos(theta);
+    const ValType e3_imag = sin(theta);
+    OP_HEAD_MASK;
+    const ValType el0_real = sv_real[pos0_gid][pos0];
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1];
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
+    sv_real[pos0_gid][pos0] = (e0_real * el0_real) - (e0_imag * el0_imag);
+    sv_imag[pos0_gid][pos0] = (e0_real * el0_imag) + (e0_imag * el0_real);
+    sv_real[pos1_gid][pos1] = (e3_real * el1_real) - (e3_imag * el1_imag);
+    sv_imag[pos1_gid][pos1] = (e3_real * el1_imag) + (e3_imag * el1_real);
+    OP_TAIL;
+}
+
+
+
+
+
+
 //============== AdjointS Gate ================
 //Clifford gate: conjugate of sqrt(Z) phase gate
 /** SDG = [1  0]
           [0 -i]
 */
-__device__ __inline__ void AdjointS_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void AdjointS_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1621,9 +1886,8 @@ __device__ __inline__ void AdjointS_GATE(const Gate* g, const Simulation* sim, V
 /** TDG = [1 0]
           [0 s2i-s2i*i]
 */
-__device__ __inline__ void AdjointT_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void AdjointT_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit)
 {
-    const IdxType qubit = g->qubit; 
     OP_HEAD;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1637,10 +1901,8 @@ __device__ __inline__ void AdjointT_GATE(const Gate* g, const Simulation* sim, V
 /** SDG = [1  0]
           [0 -i]
 */
-__device__ __inline__ void ControlledAdjointS_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledAdjointS_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1654,10 +1916,8 @@ __device__ __inline__ void ControlledAdjointS_GATE(const Gate* g, const Simulati
 /** TDG = [1 0]
           [0 s2i-s2i*i]
 */
-__device__ __inline__ void ControlledAdjointT_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+__device__ __inline__ void ControlledAdjointT_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
 {
-    const IdxType qubit = g->qubit; 
-    const IdxType mask = g->mask; 
     OP_HEAD_MASK;
     const ValType el1_real = sv_real[pos1_gid][pos1]; 
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
@@ -1666,45 +1926,130 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Gate* g, const Simulati
     OP_TAIL;
 }
 
-//============== H Gate ================
-//For measurement purpose
-
-__device__ __inline__ void H_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, IdxType qubit)
+//============== Unified 1-qubit Gate ================
+__device__ __inline__ void C1_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, 
+        const ValType e0_real, const ValType e0_imag,
+        const ValType e1_real, const ValType e1_imag,
+        const ValType e2_real, const ValType e2_imag,
+        const ValType e3_real, const ValType e3_imag,
+        const IdxType qubit)
 {
     OP_HEAD;
-    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_real = sv_real[pos0_gid][pos0];
     const ValType el0_imag = sv_imag[pos0_gid][pos0];
-    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_real = sv_real[pos1_gid][pos1];
     const ValType el1_imag = sv_imag[pos1_gid][pos1];
-    sv_real[pos0_gid][pos0] = S2I*(el0_real + el1_real); 
-    sv_imag[pos0_gid][pos0] = S2I*(el0_imag + el1_imag);
-    sv_real[pos1_gid][pos1] = S2I*(el0_real - el1_real);
-    sv_imag[pos1_gid][pos1] = S2I*(el0_imag - el1_imag);
+
+    sv_real[pos0_gid][pos0] = (e0_real * el0_real) - (e0_imag * el0_imag)
+                   +(e1_real * el1_real) - (e1_imag * el1_imag);
+    sv_imag[pos0_gid][pos0] = (e0_real * el0_imag) + (e0_imag * el0_real)
+                   +(e1_real * el1_imag) + (e1_imag * el1_real);
+    sv_real[pos1_gid][pos1] = (e2_real * el0_real) - (e2_imag * el0_imag)
+                   +(e3_real * el1_real) - (e3_imag * el1_imag);
+    sv_imag[pos1_gid][pos1] = (e2_real * el0_imag) + (e2_imag * el0_real)
+                   +(e3_real * el1_imag) + (e3_imag * el1_real);
     OP_TAIL;
 }
 
-//============== AdjointS Gate ================
-//For measurement purpose
-__device__ __inline__ void AdjointS_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, IdxType qubit)
-{
-    OP_HEAD;
-    const ValType el1_real = sv_real[pos1_gid][pos1]; 
-    const ValType el1_imag = sv_imag[pos1_gid][pos1];
-    sv_real[pos1_gid][pos1] = el1_imag;
-    sv_imag[pos1_gid][pos1] = -el1_real;
-    OP_TAIL;
-}
 
-//============== S Gate ================
-//For measurement purpose
-__device__ __inline__ void S_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, IdxType qubit)
+
+//============== Unified 2-qubit Gate ================
+__device__ __inline__ void C2_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, 
+        const ValType e00_real, const ValType e00_imag,
+        const ValType e01_real, const ValType e01_imag,
+        const ValType e02_real, const ValType e02_imag,
+        const ValType e03_real, const ValType e03_imag,
+        const ValType e10_real, const ValType e10_imag,
+        const ValType e11_real, const ValType e11_imag,
+        const ValType e12_real, const ValType e12_imag,
+        const ValType e13_real, const ValType e13_imag,
+        const ValType e20_real, const ValType e20_imag,
+        const ValType e21_real, const ValType e21_imag,
+        const ValType e22_real, const ValType e22_imag,
+        const ValType e23_real, const ValType e23_imag,
+        const ValType e30_real, const ValType e30_imag,
+        const ValType e31_real, const ValType e31_imag,
+        const ValType e32_real, const ValType e32_imag,
+        const ValType e33_real, const ValType e33_imag,
+        const IdxType qubit1, const IdxType qubit2)
 {
-    OP_HEAD;
-    const ValType el1_real = sv_real[pos1_gid][pos1]; 
-    const ValType el1_imag = sv_imag[pos1_gid][pos1];
-    sv_real[pos1_gid][pos1] = -el1_imag;
-    sv_imag[pos1_gid][pos1] = el1_real;
-    OP_TAIL;
+    multi_grid_group grid = this_multi_grid(); 
+    const IdxType q0dim = (1 << max(qubit1, qubit2) );
+    const IdxType q1dim = (1 << min(qubit1, qubit2) );
+    assert (qubit1 != qubit2); //Non-cloning
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType inner_factor = q1dim;
+    const IdxType qubit1_dim = (1 << qubit1);
+    const IdxType qubit2_dim = (1 << qubit2);
+
+    for (IdxType i = grid.thread_rank(); i < outer_factor * mider_factor * inner_factor; 
+            i+=grid.size())
+    {
+        IdxType outer = ((i/inner_factor) / (mider_factor)) * (q0dim+q0dim);
+        IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
+        IdxType inner = i % inner_factor;
+        IdxType pos0_org = outer + mider + inner;
+        IdxType pos1_org = outer + mider + inner + qubit2_dim;
+        IdxType pos2_org = outer + mider + inner + qubit1_dim;
+        IdxType pos3_org = outer + mider + inner + q0dim + q1dim;
+
+        IdxType pos0_gid = (pos0_org >> (sim->lg2_m_gpu));
+        IdxType pos1_gid = (pos1_org >> (sim->lg2_m_gpu));
+        IdxType pos2_gid = (pos2_org >> (sim->lg2_m_gpu));
+        IdxType pos3_gid = (pos3_org >> (sim->lg2_m_gpu));
+
+        IdxType pos0 = (pos0_org & (sim->m_gpu-1UL));
+        IdxType pos1 = (pos1_org & (sim->m_gpu-1UL));
+        IdxType pos2 = (pos2_org & (sim->m_gpu-1UL));
+        IdxType pos3 = (pos3_org & (sim->m_gpu-1UL));
+
+        const ValType el0_real = sv_real_ptr[pos0_gid][pos0]; 
+        const ValType el0_imag = sv_imag_ptr[pos0_gid][pos0];
+        const ValType el1_real = sv_real_ptr[pos1_gid][pos1]; 
+        const ValType el1_imag = sv_imag_ptr[pos1_gid][pos1];
+        const ValType el2_real = sv_real_ptr[pos2_gid][pos2]; 
+        const ValType el2_imag = sv_imag_ptr[pos2_gid][pos2];
+        const ValType el3_real = sv_real_ptr[pos3_gid][pos3]; 
+        const ValType el3_imag = sv_imag_ptr[pos3_gid][pos3];
+
+        //Real part
+        sv_real_ptr[pos0_gid][pos0] = (e00_real * el0_real) - (e00_imag * el0_imag)
+            +(e01_real * el1_real) - (e01_imag * el1_imag)
+            +(e02_real * el2_real) - (e02_imag * el2_imag)
+            +(e03_real * el3_real) - (e03_imag * el3_imag);
+        sv_real_ptr[pos1_gid][pos1] = (e10_real * el0_real) - (e10_imag * el0_imag)
+            +(e11_real * el1_real) - (e11_imag * el1_imag)
+            +(e12_real * el2_real) - (e12_imag * el2_imag)
+            +(e13_real * el3_real) - (e13_imag * el3_imag);
+        sv_real_ptr[pos2_gid][pos2] = (e20_real * el0_real) - (e20_imag * el0_imag)
+            +(e21_real * el1_real) - (e21_imag * el1_imag)
+            +(e22_real * el2_real) - (e22_imag * el2_imag)
+            +(e23_real * el3_real) - (e23_imag * el3_imag);
+        sv_real_ptr[pos3_gid][pos3] = (e30_real * el0_real) - (e30_imag * el0_imag)
+            +(e31_real * el1_real) - (e31_imag * el1_imag)
+            +(e32_real * el2_real) - (e32_imag * el2_imag)
+            +(e33_real * el3_real) - (e33_imag * el3_imag);
+        
+        //Imag part
+        sv_imag_ptr[pos0_gid][pos0] = (e00_real * el0_imag) + (e00_imag * el0_real)
+            +(e01_real * el1_imag) + (e01_imag * el1_real)
+            +(e02_real * el2_imag) + (e02_imag * el2_real)
+            +(e03_real * el3_imag) + (e03_imag * el3_real);
+        sv_imag_ptr[pos1_gid][pos1] = (e10_real * el0_imag) + (e10_imag * el0_real)
+            +(e11_real * el1_imag) + (e11_imag * el1_real)
+            +(e12_real * el2_imag) + (e12_imag * el2_real)
+            +(e13_real * el3_imag) + (e13_imag * el3_real);
+        sv_imag_ptr[pos2_gid][pos2] = (e20_real * el0_imag) + (e20_imag * el0_real)
+            +(e21_real * el1_imag) + (e21_imag * el1_real)
+            +(e22_real * el2_imag) + (e22_imag * el2_real)
+            +(e23_real * el3_imag) + (e23_imag * el3_real);
+        sv_imag_ptr[pos3_gid][pos3] = (e30_real * el0_imag) + (e30_imag * el0_real)
+            +(e31_real * el1_imag) + (e31_imag * el1_real)
+            +(e32_real * el2_imag) + (e32_imag * el2_real)
+            +(e33_real * el3_imag) + (e33_imag * el3_real);
+    }
+    grid.sync();
 }
 
 
@@ -1732,14 +2077,17 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     if (pauli == 1)
     {
         H_GATE(sim, sv_real, sv_imag, qubit);
+        H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
     if (pauli == 2)
     {
         AdjointS_GATE(sim, sv_real, sv_imag, qubit);
+        S_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
         H_GATE(sim, sv_real, sv_imag, qubit);
+        H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
 
-    for (IdxType i = grid.thread_rank(); i<(sim->dim); i+=grid.size())
+    for (IdxType i = grid.thread_rank(); i<(1UL<<(sim->n_qubits)); i+=grid.size())
     {
         if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
         {
@@ -1747,7 +2095,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         }
         else
         {
-            PGAS(m_real,i) = PGAS(sv_real,i)*PGAS(sv_real,i) + PGAS(sv_imag,i)*PGAS(sv_imag,i);
+            PGAS(m_real,i) = abs(PGAS(sv_real,((i<<(sim->n_qubits))+i)));
         }
     }
     grid.sync();
@@ -1772,7 +2120,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     if (val) // we get 1, so we set all entires with (id&mask==0) to 0, and scale entires with (id&mask==1) by factor
     {
         //ValType factor = (prob_of_one == 0) ? 1. : 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
-        ValType factor = 1./sqrt(prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+        ValType factor = 1./prob_of_one; //we compute 1/sqrt(prob), so other entries can times this val
 
         //assert(factor > 0);
 
@@ -1805,7 +2153,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         //ValType factor = (prob_of_one == 1) ? 1. : 1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
         //ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
 
-        ValType factor =  1./sqrt(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
+        ValType factor =  1./(1.-prob_of_one); //we compute 1/sqrt(prob), so other entries can times this val
 
         //assert(factor > 0);
 
@@ -1830,48 +2178,285 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     if (pauli == 1)
     {
         H_GATE(sim, sv_real, sv_imag, qubit);
+        H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
     if (pauli == 2)
     {
         H_GATE(sim, sv_real, sv_imag, qubit);
+        H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
         S_GATE(sim, sv_real, sv_imag, qubit);
+        AdjointS_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
-
 }
 
+__device__ void X_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    X_GATE(sim, sv_real, sv_imag, g->qubit); 
+    X_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+
+    /*
+    C2_GATE(sim, sv_real, sv_imag, XR0,XI0, XR1,XI1, XR2,XI2, XR3,XI3,
+                                   XR4,XI4, XR5,XI5, XR6,XI6, XR7,XI7,
+                                   XR8,XI8, XR9,XI9, XR10,XI10, XR11,XI11,
+                                   XR12,XI12, XR13,XI13, XR14,XI14, XR15,XI15,
+            g->qubit, (g->qubit)+(sim->n_qubits));
+     */
+}
+
+__device__ void Y_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    Y_GATE(sim, sv_real, sv_imag, g->qubit); 
+    ConjugateY_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+
+    /*
+    C2_GATE(sim, sv_real, sv_imag, YR0,YI0, YR1,YI1, YR2,YI2, YR3,YI3,
+                                   YR4,YI4, YR5,YI5, YR6,YI6, YR7,YI7,
+                                   YR8,YI8, YR9,YI9, YR10,YI10, YR11,YI11,
+                                   YR12,YI12, YR13,YI13, YR14,YI14, YR15,YI15,
+            g->qubit, (g->qubit)+(sim->n_qubits));
+     */
+}
+
+__device__ void Z_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    Z_GATE(sim, sv_real, sv_imag, g->qubit); 
+    Z_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+
+    /*
+    C2_GATE(sim, sv_real, sv_imag, ZR0,ZI0, ZR1,ZI1, ZR2,ZI2, ZR3,ZI3,
+                                   ZR4,ZI4, ZR5,ZI5, ZR6,ZI6, ZR7,ZI7,
+                                   ZR8,ZI8, ZR9,ZI9, ZR10,ZI10, ZR11,ZI11,
+                                   ZR12,ZI12, ZR13,ZI13, ZR14,ZI14, ZR15,ZI15,
+            g->qubit, (g->qubit)+(sim->n_qubits));
+     */
+}
+
+__device__ void H_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    H_GATE(sim, sv_real, sv_imag, g->qubit); 
+    H_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+    
+    /*
+    C2_GATE(sim, sv_real, sv_imag, HR0,HI0, HR1,HI1, HR2,HI2, HR3,HI3,
+                                   HR4,HI4, HR5,HI5, HR6,HI6, HR7,HI7,
+                                   HR8,HI8, HR9,HI9, HR10,HI10, HR11,HI11,
+                                   HR12,HI12, HR13,HI13, HR14,HI14, HR15,HI15,
+            g->qubit, (g->qubit)+(sim->n_qubits));
+     */
+}
+
+__device__ void S_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    S_GATE(sim, sv_real, sv_imag, g->qubit); 
+    AdjointS_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void T_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    T_GATE(sim, sv_real, sv_imag, g->qubit); 
+    AdjointT_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void AdjointS_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    AdjointS_GATE(sim, sv_real, sv_imag, g->qubit); 
+    S_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void AdjointT_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    AdjointT_GATE(sim, sv_real, sv_imag, g->qubit); 
+    T_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void RI_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    RI_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateRI_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void RX_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    RX_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateRX_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void RY_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    RY_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    RY_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void RZ_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    RZ_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateRZ_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void EI_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    EI_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateEI_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void EX_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    EX_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateEX_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void EY_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    EY_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    EY_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void EZ_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    EZ_GATE(sim, sv_real, sv_imag, g->theta, g->qubit); 
+    ConjugateEZ_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits));
+}
+
+__device__ void ControlledX_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledX_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledX_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+    
+}
+
+__device__ void ControlledY_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledY_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledConjugateY_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+}
+
+__device__ void ControlledZ_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledZ_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledZ_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+}
+
+__device__ void ControlledH_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledH_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledH_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledS_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledS_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledAdjointS_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledT_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledT_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledAdjointT_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+
+__device__ void ControlledRI_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledRI_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateRI_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledRX_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledRX_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateRX_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledRY_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledRY_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledRY_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledRZ_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledRZ_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateRZ_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledEI_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledEI_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateEI_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledEX_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledEX_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateEX_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledEY_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledEY_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledEY_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledEZ_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledEZ_GATE(sim, sv_real, sv_imag, g->theta, g->qubit, g->mask); 
+    ControlledConjugateEZ_GATE(sim, sv_real, sv_imag, g->theta, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledAdjointS_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledAdjointS_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledS_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+__device__ void ControlledAdjointT_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    ControlledAdjointT_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    ControlledT_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+} 
+
+
+
+
+
+
+
+
+
+
 // ============================ Device Function Pointers ================================
-__device__ func_t pX = X_GATE;
-__device__ func_t pY = Y_GATE; 
-__device__ func_t pZ = Z_GATE; 
-__device__ func_t pH = H_GATE; 
-__device__ func_t pS = S_GATE;
-__device__ func_t pT = T_GATE;
-__device__ func_t pRI = RI_GATE;
-__device__ func_t pRX = RX_GATE;
-__device__ func_t pRY = RY_GATE;
-__device__ func_t pRZ = RZ_GATE;
-__device__ func_t pEI = EI_GATE;
-__device__ func_t pEX = EX_GATE;
-__device__ func_t pEY = EY_GATE;
-__device__ func_t pEZ = EZ_GATE;
-__device__ func_t pControlledX = ControlledX_GATE;
-__device__ func_t pControlledY = ControlledY_GATE; 
-__device__ func_t pControlledZ = ControlledZ_GATE; 
-__device__ func_t pControlledH = ControlledH_GATE; 
-__device__ func_t pControlledS = ControlledS_GATE;
-__device__ func_t pControlledT = ControlledT_GATE;
-__device__ func_t pControlledRI = ControlledRI_GATE;
-__device__ func_t pControlledRX = ControlledRX_GATE;
-__device__ func_t pControlledRY = ControlledRY_GATE;
-__device__ func_t pControlledRZ = ControlledRZ_GATE;
-__device__ func_t pControlledEI = ControlledEI_GATE;
-__device__ func_t pControlledEX = ControlledEX_GATE;
-__device__ func_t pControlledEY = ControlledEY_GATE;
-__device__ func_t pControlledEZ = ControlledEZ_GATE;
-__device__ func_t pAdjointS = AdjointS_GATE;
-__device__ func_t pAdjointT = AdjointT_GATE;
-__device__ func_t pControlledAdjointS = ControlledAdjointS_GATE;
-__device__ func_t pControlledAdjointT = ControlledAdjointT_GATE;
+__device__ func_t pX = X_OP;
+__device__ func_t pY = Y_OP; 
+__device__ func_t pZ = Z_OP; 
+__device__ func_t pH = H_OP; 
+__device__ func_t pS = S_OP;
+__device__ func_t pT = T_OP;
+__device__ func_t pRI = RI_OP;
+__device__ func_t pRX = RX_OP;
+__device__ func_t pRY = RY_OP;
+__device__ func_t pRZ = RZ_OP;
+__device__ func_t pEI = EI_OP;
+__device__ func_t pEX = EX_OP;
+__device__ func_t pEY = EY_OP;
+__device__ func_t pEZ = EZ_OP;
+__device__ func_t pControlledX = ControlledX_OP;
+__device__ func_t pControlledY = ControlledY_OP; 
+__device__ func_t pControlledZ = ControlledZ_OP; 
+__device__ func_t pControlledH = ControlledH_OP; 
+__device__ func_t pControlledS = ControlledS_OP;
+__device__ func_t pControlledT = ControlledT_OP;
+__device__ func_t pControlledRI = ControlledRI_OP;
+__device__ func_t pControlledRX = ControlledRX_OP;
+__device__ func_t pControlledRY = ControlledRY_OP;
+__device__ func_t pControlledRZ = ControlledRZ_OP;
+__device__ func_t pControlledEI = ControlledEI_OP;
+__device__ func_t pControlledEX = ControlledEX_OP;
+__device__ func_t pControlledEY = ControlledEY_OP;
+__device__ func_t pControlledEZ = ControlledEZ_OP;
+__device__ func_t pAdjointS = AdjointS_OP;
+__device__ func_t pAdjointT = AdjointT_OP;
+__device__ func_t pControlledAdjointS = ControlledAdjointS_OP;
+__device__ func_t pControlledAdjointT = ControlledAdjointT_OP;
 __device__ func_t pMeasure = Measure_GATE;
 //=====================================================================================
 

@@ -1365,10 +1365,10 @@ __device__ __inline__ void ControlledRY_GATE(const Simulation* sim, ValType* sv_
 //Rotation around Z-axis
 __device__ __inline__ void ControlledRZ_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    ValType e0_real = cos(theta/2);
-    ValType e0_imag = -sin(theta/2);
-    ValType e3_real = cos(theta/2);
-    ValType e3_imag = sin(theta/2);
+    ValType e0_real = cos(theta/2.0);
+    ValType e0_imag = -sin(theta/2.0);
+    ValType e3_real = cos(theta/2.0);
+    ValType e3_imag = sin(theta/2.0);
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0]; 
     const ValType el0_imag = sv_imag[pos0];
@@ -1385,10 +1385,10 @@ __device__ __inline__ void ControlledRZ_GATE(const Simulation* sim, ValType* sv_
 //Rotation around Z-axis
 __device__ __inline__ void ControlledConjugateRZ_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, const ValType theta, const IdxType qubit, const IdxType mask)
 {
-    ValType e0_real = cos(theta/2);
-    ValType e0_imag = sin(theta/2);
-    ValType e3_real = cos(theta/2);
-    ValType e3_imag = -sin(theta/2);
+    ValType e0_real = cos(theta/2.0);
+    ValType e0_imag = sin(theta/2.0);
+    ValType e3_real = cos(theta/2.0);
+    ValType e3_imag = -sin(theta/2.0);
     OP_HEAD_MASK;
     const ValType el0_real = sv_real[pos0]; 
     const ValType el0_imag = sv_imag[pos0];
