@@ -219,9 +219,7 @@ public:
         sim_gpu(NULL),
         sv_real(NULL),
         sv_imag(NULL),
-        m_real(NULL),
-        is_simed(false),
-        nq_to_be_released(0)
+        m_real(NULL)
     {
         cudaSafeCall(cudaSetDevice(i_gpu));
         circuit_handle = new Circuit();
@@ -637,8 +635,6 @@ public:
     ValType* sv_imag;
     //For joint measurement
     ValType* m_real;
-    bool is_simed;
-    IdxType nq_to_be_released;
 
     //GPU memory usage
     ValType gpu_mem;
