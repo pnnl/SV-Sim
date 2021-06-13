@@ -869,9 +869,10 @@ public:
         }
         //accumulate for sampling
         ValType* sv_scan = NULL;
-        SAFE_ALOC_HOST(sv_scan, (dim+1)*sizeof(ValType));
+        IdxType sv_num = (1UL<<n_qubits);
+        SAFE_ALOC_HOST(sv_scan, (sv_num+1)*sizeof(ValType));
         sv_scan[0] = 0;
-        for (IdxType i=1; i<dim+1; i++)
+        for (IdxType i=1; i<sv_num+1; i++)
             sv_scan[i] = sv_scan[i-1]+(sv_real_cpu[i-1]*sv_real_cpu[i-1]);
         srand(RAND_SEED);
         IdxType* res_state = new IdxType[repetition];
@@ -879,12 +880,12 @@ public:
         for (unsigned i=0; i<repetition; i++)
         {
             ValType r = (ValType)rand()/(ValType)RAND_MAX;
-            for (IdxType j=0; j<dim; j++)
+            for (IdxType j=0; j<sv_num; j++)
                 if (sv_scan[j]<=r && r<sv_scan[j+1])
                     res_state[i] = j;
         }
-        if ( abs(sv_scan[dim] - 1.0) > ERROR_BAR )
-            printf("Sum of probability is far from 1.0 with %lf\n", sv_scan[dim]);
+        if ( abs(sv_scan[sv_num] - 1.0) > ERROR_BAR )
+            printf("Sum of probability is far from 1.0 with %lf\n", sv_scan[sv_num]);
         SAFE_FREE_HOST(sv_scan);
         return res_state;
     }
@@ -971,7 +972,7 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
             IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
             IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
             IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1UL));  
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
 #define OP_HEAD_MASK multi_grid_group grid = this_multi_grid(); \
@@ -985,7 +986,7 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
             IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
             IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
             IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1UL));  
 
 //Define MG-BSP machine operation footer
 #define OP_TAIL  } grid.sync(); 
