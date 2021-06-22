@@ -102,7 +102,7 @@ public:
         IdxType mask = 0;
         for (long i=0; i<numControls; i++)
         {
-            mask = mask | (1<<to_qubit(controls[i]));
+            mask = mask | (1UL<<to_qubit(controls[i]));
         }
         return mask;
     }
@@ -146,15 +146,73 @@ public:
     void Exp(long numTargets, PauliId paulis[], Qubit targets[], 
             double theta) override
     {
-        for (long i=0; i<numTargets; i++)
+        if (numTargets == 1)
         {
-            IdxType target = to_qubit(targets[i]);
-            switch (paulis[i]) 
+            IdxType target = to_qubit(targets[0]);
+            switch (paulis[0]) 
             {
                 case PauliId_I: sim->EI(theta, target); break;
                 case PauliId_X: sim->EX(theta, target); break;
                 case PauliId_Y: sim->EY(theta, target); break;
                 case PauliId_Z: sim->EZ(theta, target); break;
+            }
+        }
+        else
+        {
+            //convert Pauli-X/Y to Pauli-Z
+            for (long i=0; i<numTargets; i++)
+            {
+                if (paulis[i] == PauliId_X)
+                {
+                    IdxType target = to_qubit(targets[i]);
+                    sim->H(target);
+                }
+                if (paulis[i] == PauliId_Y)
+                {
+                    IdxType target = to_qubit(targets[i]);
+                    sim->H(target);
+                    sim->S(target);
+                    sim->H(target);
+                }
+            }
+            //Apply CX chain
+            IdxType target_0 = to_qubit(targets[0]);
+            for (long i=1; i<numTargets; i++)
+            {
+                if (paulis[i] != PauliId_I)
+                {
+                    IdxType control = to_qubit(targets[i]);
+                    IdxType mask = 1UL<<control;
+                    sim->ControlledX(target_0, mask);
+                }
+            }
+            //Apply RZ
+            sim->RZ(theta*(-2.0), target_0);
+            //Apply reverse CX chain
+            for (long i=numTargets-1; i>0; i--)
+            {
+                if (paulis[i] != PauliId_I)
+                {
+                    IdxType control = to_qubit(targets[i]);
+                    IdxType mask = 1UL<<control;
+                    sim->ControlledX(target_0, mask);
+                }
+            }
+            //Reverse Pauli-X/Y to Pauli-Z
+            for (long i=numTargets-1; i>=0; i--)
+            {
+                if (paulis[i] == PauliId_X)
+                {
+                    IdxType target = to_qubit(targets[i]);
+                    sim->H(target);
+                }
+                if (paulis[i] == PauliId_Y)
+                {
+                    IdxType target = to_qubit(targets[i]);
+                    sim->H(target);
+                    sim->AdjointS(target);
+                    sim->H(target);
+                }
             }
         }
     }
@@ -211,16 +269,75 @@ public:
     void ControlledExp(long numControls, Qubit Qcontrols[], long numTargets,
             PauliId paulis[], Qubit Qtargets[], double theta) override
     {
-        IdxType mask = ControlledToMask(numControls, Qcontrols);
-        for (long i=0; i<numTargets; i++)
+        IdxType controlmask = ControlledToMask(numControls, Qcontrols);
+        if (numTargets == 1)
         {
-            IdxType target = to_qubit(Qtargets[i]);
-            switch (paulis[i]) 
+            IdxType target = to_qubit(Qtargets[0]);
+            switch (paulis[0]) 
             {
-                case PauliId_I: sim->ControlledEI(theta, target, mask); break;
-                case PauliId_X: sim->ControlledEX(theta, target, mask); break;
-                case PauliId_Y: sim->ControlledEY(theta, target, mask); break;
-                case PauliId_Z: sim->ControlledEZ(theta, target, mask); break;
+                case PauliId_I: sim->ControlledEI(theta, target, controlmask); break;
+                case PauliId_X: sim->ControlledEX(theta, target, controlmask); break;
+                case PauliId_Y: sim->ControlledEY(theta, target, controlmask); break;
+                case PauliId_Z: sim->ControlledEZ(theta, target, controlmask); break;
+            }
+        }
+        else
+        {
+            //convert Pauli-X/Y to Pauli-Z
+            for (long i=0; i<numTargets; i++)
+            {
+                if (paulis[i] == PauliId_X)
+                {
+                    IdxType target = to_qubit(Qtargets[i]);
+                    sim->H(target);
+                }
+                if (paulis[i] == PauliId_Y)
+                {
+                    IdxType target = to_qubit(Qtargets[i]);
+                    sim->H(target);
+                    sim->S(target);
+                    sim->H(target);
+                }
+            }
+            //Apply CX chain
+            IdxType target_0 = to_qubit(Qtargets[0]);
+            for (long i=1; i<numTargets; i++)
+            {
+                if (paulis[i] != PauliId_I)
+                {
+                    IdxType control = to_qubit(Qtargets[i]);
+                    IdxType mask = 1UL<<control;
+                    sim->ControlledX(target_0, mask);
+                }
+            }
+            //Apply RZ
+            sim->ControlledRZ(theta*(-2.0), target_0, controlmask);
+
+            //Apply reverse CX chain
+            for (long i=numTargets-1; i>0; i--)
+            {
+                if (paulis[i] != PauliId_I)
+                {
+                    IdxType control = to_qubit(Qtargets[i]);
+                    IdxType mask = 1UL<<control;
+                    sim->ControlledX(target_0, mask);
+                }
+            }
+            //Reverse Pauli-X/Y to Pauli-Z
+            for (long i=numTargets-1; i>=0; i--)
+            {
+                if (paulis[i] == PauliId_X)
+                {
+                    IdxType target = to_qubit(Qtargets[i]);
+                    sim->H(target);
+                }
+                if (paulis[i] == PauliId_Y)
+                {
+                    IdxType target = to_qubit(Qtargets[i]);
+                    sim->H(target);
+                    sim->AdjointS(target);
+                    sim->H(target);
+                }
             }
         }
     }
