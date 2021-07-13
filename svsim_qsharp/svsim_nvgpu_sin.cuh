@@ -50,6 +50,7 @@ enum OP  //32 gates + measure
     ControlledEY, ControlledEZ, //2
     AdjointS, AdjointT, //2
     ControlledAdjointS, ControlledAdjointT, //2
+    Swap, //1
     Measure //1
 };
 
@@ -64,8 +65,8 @@ const char *OP_NAMES[] = {
     "ControlledEI", "ControlledEX",
     "ControlledEY", "ControlledEZ", 
     "AdjointS", "AdjointT", 
-    "ControlledAdjointS", "ControlledAdjointT", 
-    "Measure"
+    "ControlledAdjointS", "ControlledAdjointT",
+    "Swap", "Measure"
 };
 
 //Define gate function pointers
@@ -101,6 +102,7 @@ extern __device__ func_t pAdjointS;
 extern __device__ func_t pAdjointT;
 extern __device__ func_t pControlledAdjointS;
 extern __device__ func_t pControlledAdjointT;
+extern __device__ func_t pSwap;
 extern __device__ func_t pMeasure;
 
    
@@ -300,6 +302,7 @@ public:
         cudaSafeCall(cudaMemcpyFromSymbol(&gAdjointT, pAdjointT, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointS, pControlledAdjointS, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointT, pControlledAdjointT, sizeof(func_t))); 
+        cudaSafeCall(cudaMemcpyFromSymbol(&gSwap, pSwap, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gMeasure, pMeasure, sizeof(func_t))); 
     }
 
@@ -464,6 +467,11 @@ public:
     void ControlledAdjointT(IdxType qubit, IdxType mask)
     {
         Gate* G = new Gate(OP::ControlledAdjointT,gControlledAdjointT,qubit,0,mask);
+        circuit_handle->append(*G);
+    }
+    void Swap(IdxType qubit0, IdxType qubit1)
+    {
+        Gate* G = new Gate(OP::Swap,gSwap,qubit0,0,qubit1);
         circuit_handle->append(*G);
     }
     void Measure(IdxType qubit, ValType rand, IdxType pauli)
@@ -1367,6 +1375,62 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Gate* g, const Simulati
     OP_TAIL;
 }
 
+//============== Swap Gate ================
+//Swap the position of two qubits
+//This is for qubit refinement when release or rearrange
+
+__device__ __inline__ void SWAP_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
+{
+    const IdxType qubit1 = g->qubit; 
+    const IdxType qubit2 = g->mask; 
+    assert (qubit1 != qubit2); //Non-cloning
+
+    grid_group grid = this_grid(); 
+    const int tid = blockDim.x * blockIdx.x + threadIdx.x; 
+    const IdxType q0dim = (1 << max(qubit1, qubit2) );
+    const IdxType q1dim = (1 << min(qubit1, qubit2) );
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType inner_factor = q1dim;
+    const IdxType qubit1_dim = (1 << qubit1);
+    const IdxType qubit2_dim = (1 << qubit2);
+
+    for (IdxType i = tid; i < outer_factor * mider_factor * inner_factor; 
+            i+=blockDim.x*gridDim.x)
+    {
+        IdxType outer = ((i/inner_factor) / (mider_factor)) * (q0dim+q0dim);
+        IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
+        IdxType inner = i % inner_factor;
+        IdxType pos0 = outer + mider + inner; //qubit-1
+        IdxType pos1 = outer + mider + inner + qubit2_dim; //qubit-1
+        IdxType pos2 = outer + mider + inner + qubit1_dim; //qubit-2
+        IdxType pos3 = outer + mider + inner + q0dim + q1dim; //qubit-2
+        
+        const ValType el0_real = sv_real[pos0]; 
+        const ValType el0_imag = sv_imag[pos0];
+        const ValType el1_real = sv_real[pos1]; 
+        const ValType el1_imag = sv_imag[pos1];
+        const ValType el2_real = sv_real[pos2]; 
+        const ValType el2_imag = sv_imag[pos2];
+        const ValType el3_real = sv_real[pos3]; 
+        const ValType el3_imag = sv_imag[pos3];
+
+        //Real part
+        sv_real[pos0] = el2_real;
+        sv_real[pos1] = el3_real; 
+        sv_real[pos2] = el0_real;
+        sv_real[pos3] = el1_real;
+        //Imag part
+        sv_imag[pos0] = el2_imag;
+        sv_imag[pos1] = el3_imag; 
+        sv_imag[pos2] = el0_imag;
+        sv_imag[pos3] = el1_imag;
+    }
+    grid.sync();
+}
+
+
+
 //============== H Gate ================
 //For measurement purpose
 
@@ -1407,6 +1471,8 @@ __device__ __inline__ void S_GATE(const Simulation* sim, ValType* sv_real, ValTy
     sv_imag[pos1] = el1_real;
     OP_TAIL;
 }
+
+
 
 
 
@@ -1572,6 +1638,7 @@ __device__ func_t pAdjointS = AdjointS_GATE;
 __device__ func_t pAdjointT = AdjointT_GATE;
 __device__ func_t pControlledAdjointS = ControlledAdjointS_GATE;
 __device__ func_t pControlledAdjointT = ControlledAdjointT_GATE;
+__device__ func_t pSwap = SWAP_GATE;
 __device__ func_t pMeasure = Measure_GATE;
 //=====================================================================================
 
