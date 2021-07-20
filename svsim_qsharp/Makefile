@@ -39,7 +39,7 @@ QIR_BRIDGE_FLAGS = -I. -I$(QIR_BRIDGE_PUBLIC) -L$(QIR_BRIDGE_BUILD)/lib/QIR -L$(
 
 #OBJ = Grover_nvgpu
 #OBJ = QAOA_cpu
-OBJ = TeleportationSample_nvgpu
+OBJ = TeleportationSample_cpu
 
 #Not sure: HubbardSimulationSample_sin CustomModAdd_sin VariationalQuantumEigensolver_sin PhaseEstimationSample_sin TeleportationSample_sin 
 

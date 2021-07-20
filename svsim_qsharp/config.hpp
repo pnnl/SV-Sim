@@ -16,17 +16,17 @@
 #define CONFIG_HPP
 
 //Backend
-#define USE_NVGPU
+//#define USE_NVGPU
 #define USE_OMP
 
 //Number of PEs: CPUs, GPUs, Nodes
-#define N_PE 2
+#define N_PE 4
 
 //Which GPU for single
 #define I_GPU 4
 
 //Track per circuit execution performance
-#define PRINT_MEA_PER_CIRCUIT
+//#define PRINT_MEA_PER_CIRCUIT
 
 //Error check for all NVIDIA CUDA Runtim-API calls and Kernel check
 #define CUDA_ERROR_CHECK

@@ -108,7 +108,6 @@ public:
     //================= RuntimeDriver ==================//
     Qubit AllocateQubit() override 
     {
-        printf("To allocate qubits...\n");
         ++n_qubits;
         IdxType this_logical_qubit = MAX_IDX;
         //find a free logical qubit
@@ -131,125 +130,35 @@ public:
     }
     void ReleaseQubit(Qubit Q) override
     {
-
-        printf("\nBefore Logical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", logical_qubits[i]);
-        printf("\nPhysical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", physical_qubits[i]);
-        printf("\n");
-
-
-
-        IdxType gpu_scale = floor(log((double)N_PE+0.5)/log(2.0));
         IdxType this_logical_qubit = to_qubit(Q);
         IdxType this_physical_qubit = logical_qubits[this_logical_qubit];
-
-        printf("To release logical qubit:%llu, which is physical qubit:%llu...\n", this_logical_qubit, this_physical_qubit);
         IdxType target_physical_qubit = n_qubits-1;
-
-        //if (n_qubits-1 > gpu_scale)
-        //target_physical_qubit -= gpu_scale;
-
-        printf("switch from this:%llu to target:%llu\n",this_logical_qubit, target_physical_qubit);
         IdxType target_logical_qubit = physical_qubits[target_physical_qubit];
-        printf("\nBefore==\n");
-        sim->print_res_sv();
-
-
-       
+        
         //printf("Release qubit %lu at slot %lu.\n", this_logical_qubit, this_physical_qubit);
         
         //if not the last physical qubit
         //then swap to the last physical slot
         if (this_physical_qubit != target_physical_qubit) 
         {
-            printf("this_physical:%llu, this_logical:%llu, target_physical:%llu, target_logic:%llu, n_qubit:%llu\n",this_physical_qubit, this_logical_qubit, target_physical_qubit, target_logical_qubit, n_qubits);
-            //sim->print_res_sv();
             sim->Swap(this_physical_qubit, target_physical_qubit);
-            //sim->print_res_sv();
-            //assert(this_physical_qubit<n_qubits-1);
-            //assert(this_logical_qubit<n_qubits-1);
-            //assert(target_physical_qubit<n_qubits-1);
-            //assert(target_logical_qubit<n_qubits-1);
-
             logical_qubits[this_logical_qubit] = MAX_IDX;//clear this logic qubit slot
             physical_qubits[target_physical_qubit] = MAX_IDX; //clear the final physical slot
             logical_qubits[target_logical_qubit] = this_physical_qubit;
             physical_qubits[this_physical_qubit] = target_logical_qubit;
-
- 
         }
         else
         {
             logical_qubits[this_logical_qubit] = MAX_IDX;
             physical_qubits[this_physical_qubit] = MAX_IDX;
         }
-
-        printf("\nMid Logical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", logical_qubits[i]);
-        printf("\nPhysical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", physical_qubits[i]);
-        printf("\n");
- 
-
-
-        //if (n_qubits-1 > gpu_scale)
-        //{
-        //printf("\nNew swap==\n");
-        //sim->Swap(n_qubits-1, n_qubits-1-gpu_scale);
-        //printf("!!!!!!!!\n");
-        //}
-        //else
-        //{
-        //sim->Swap(n_qubits-1, n_qubits-1-gpu_scale);
-        //
-        //}
-        //
-        // 
-        ////If there're more than 1 GPU, we need to release the first local qubit (qubit index not for GPU addressing)
-        //// Physical Qubit Address:
-        //// |GPUs | qubit_to_release normal qubits|
-        if (n_qubits-1>=gpu_scale)
-        {
-            for (IdxType i=0; i<N_QUBIT_SLOT; i++)
-            {
-                if (logical_qubits[i]!=MAX_IDX && logical_qubits[i] > n_qubits-1-gpu_scale)
-                {
-                    physical_qubits[logical_qubits[i]] = MAX_IDX;
-                    logical_qubits[i] -= gpu_scale; 
-                    physical_qubits[logical_qubits[i]] = i;
-                    //break;
-                }
-            }
-            printf("!!!!New Swap!!!!\n");
-            sim->Swap(n_qubits-1, n_qubits-1-gpu_scale);
-        }
-
-
-        printf("\nAfter Logical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", logical_qubits[i]);
-        printf("\nPhysical:\n");
-        for (int i=0; i<N_QUBIT_SLOT; i++)
-            printf(" %llu", physical_qubits[i]);
-        printf("\n");
-  
-
         //The first time a release is encoutered, we need to check if the simulation 
         //should be run until here, otherwise, ancilla qubit may disappear
         if (sim->get_n_gates() != 0)
             sim->sim();
 
-        
         sim->ReleaseQubit();//always release the last
         --n_qubits;
-
-        printf("\nAfter==\n");
-        sim->print_res_sv();
 
         if (n_qubits == 0) sim->reset();
     }
@@ -536,10 +445,6 @@ public:
     {
         assert(numBases == 1);
         assert(numTargets == 1);
-
-        //printf("\n======Before========\n");
-        //sim->print_res_sv();
-        //printf("\n==============\n");
 
         IdxType target = to_slot(targets[0]);
         ValType rand = (ValType)std::rand()/(ValType)RAND_MAX;
