@@ -35,8 +35,8 @@
 namespace SVSim 
 {
 //Number of max qubits
-//#define N_QUBIT_SLOT 28
-#define N_QUBIT_SLOT 10
+#define N_QUBIT_SLOT 28
+//#define N_QUBIT_SLOT 10
 //Random seed
 #define RAND_SEED time(0)
 //Number of threads per thread block
