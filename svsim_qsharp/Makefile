@@ -15,11 +15,16 @@
 # GPU Compiler
 NVCC = nvcc
 # Should adjust -arch=sm_XX based on NVIDIA GPU compute capability
-NVCC_FLAGS = -O3 -arch=sm_80 -m64 -std=c++14 -rdc=true --compiler-options -fPIC
+NVCC_FLAGS = -O3 -arch=sm_80 -m64 -std=c++14 -rdc=true --compiler-options " -fopenmp -Wall -fPIC" 
+
+
+# CPU Compiler
+CC = g++
+CC_FLAGS = -O3 -m64 -std=c++14 -fPIC -fopenmp
 
 # QIR requires Clang, QIR and QIR-Bridge
 QIRCC = clang++
-QIRCC_FLAGS = -std=c++17 -m64 -O3 -I. -I$(QIR_BRIDGE_PUBLIC) -I$(QIR_BRIDGE_TEST) -I$(MPI_INC) -fPIC
+QIRCC_FLAGS = -std=c++17 -m64 -O3 -I. -I$(MPI_INC) -fPIC
 
 # QIR Bridge path
 QIR_BRIDGE_PUBLIC = /people/lian599/qir/qsharp-runtime/src/Qir/Runtime/public/
@@ -32,7 +37,9 @@ QIR_BRIDGE_FLAGS = -I. -I$(QIR_BRIDGE_PUBLIC) -L$(QIR_BRIDGE_BUILD)/lib/QIR -L$(
 #This is current not wokring due to too many qubits requested
 #EvaluatingFunctions_sin ResourceCounting_sin 
 
-OBJ = Qrng_sin
+#OBJ = Grover_nvgpu
+#OBJ = QAOA_cpu
+OBJ = TeleportationSample_nvgpu
 
 #Not sure: HubbardSimulationSample_sin CustomModAdd_sin VariationalQuantumEigensolver_sin PhaseEstimationSample_sin TeleportationSample_sin 
 
@@ -40,15 +47,66 @@ OBJ = Qrng_sin
 
 all: $(OBJ) 
 
+Grover_cpu: Grover_driver.cc Grover.ll svsim_qsharp_wrapper.cpp svsim_cpu_omp.hpp svsim_cpu_sin.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover.o -c Grover.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover_driver.o -c Grover_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cpp Grover.o Grover_driver.o -o $@
+
+Grover_nvgpu: Grover_driver.cc Grover.ll svsim_qsharp_wrapper.cpp svsim_nvgpu_sin.cuh svsim_nvgpu_omp.cuh svsim_nvgpu_mpi.cuh config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover.o -c Grover.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover_driver.o -c Grover_driver.cc
+	cp svsim_qsharp_wrapper.cpp svsim_qsharp_wrapper.cu
+	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cu Grover.o Grover_driver.o -o $@
+
+QAOA_cpu: QAOA_driver.cc QAOA.ll svsim_qsharp_wrapper.cpp svsim_cpu_omp.hpp svsim_cpu_sin.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o QAOA.o -c QAOA.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o QAOA_driver.o -c QAOA_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cpp QAOA.o QAOA_driver.o -o $@
+
+QAOA_nvgpu: QAOA_driver.cc QAOA.ll svsim_qsharp_wrapper.cpp svsim_nvgpu_omp.cuh svsim_nvgpu_sin.cuh svsim_nvgpu_mpi.cuh config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o QAOA.o -c QAOA.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o QAOA_driver.o -c QAOA_driver.cc
+	cp svsim_qsharp_wrapper.cpp svsim_qsharp_wrapper.cu
+	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cu QAOA.o QAOA_driver.o -o $@
+
+
+
+
+TeleportationSample_cpu: TeleportationSample_driver.cc TeleportationSample.ll svsim_qsharp_wrapper.cpp svsim_cpu_omp.hpp svsim_cpu_sin.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample.o -c TeleportationSample.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample_driver.o -c TeleportationSample_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cpp TeleportationSample.o TeleportationSample_driver.o -o $@
+
+TeleportationSample_nvgpu: TeleportationSample_driver.cc TeleportationSample.ll svsim_qsharp_wrapper.cpp svsim_nvgpu_sin.cuh svsim_nvgpu_omp.cuh config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample.o -c TeleportationSample.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample_driver.o -c TeleportationSample_driver.cc
+	cp svsim_qsharp_wrapper.cpp svsim_qsharp_wrapper.cu
+	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_qsharp_wrapper.cu TeleportationSample.o TeleportationSample_driver.o -o $@
+
+
+
+
+
+
+
+
+
+
+
+
+VariationalQuantumEigensolver_cpu: VariationalQuantumEigensolver.ll VariationalQuantumEigensolver_driver.cc svsim_wrapper_cpu_sin.cpp svsim_cpu_sin.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o VariationalQuantumEigensolver.o -c VariationalQuantumEigensolver.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o VariationalQuantumEigensolver_driver.o -c VariationalQuantumEigensolver_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper_cpu_sin.cpp VariationalQuantumEigensolver.o VariationalQuantumEigensolver_driver.o -o $@
+
+
+
+
+
 VariationalQuantumEigensolver_sin: VariationalQuantumEigensolver.ll VariationalQuantumEigensolver_driver.cc svsim_wrapper_nvgpu_sin.cu svsim_nvgpu_sin.cuh config.hpp
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o VariationalQuantumEigensolver.o -c VariationalQuantumEigensolver.ll
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o VariationalQuantumEigensolver_driver.o -c VariationalQuantumEigensolver_driver.cc
 	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper_nvgpu_sin.cu VariationalQuantumEigensolver.o VariationalQuantumEigensolver_driver.o -o $@
-
-SimpleAlgorithms_sin: SimpleAlgorithms_driver.cc SimpleGroverSample.ll svsim_wrapper_nvgpu_sin.cu svsim_nvgpu_sin.cuh config.hpp
-	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o SimpleGroverSample.o -c SimpleGroverSample.ll
-	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o SimpleGroverSample_driver.o -c SimpleGroverSample_driver.cc
-	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper_nvgpu_sin.cu SimpleGroverSample.o SimpleGroverSample_driver.o -o $@
 
 BitFlipCode_sin: BitFlipCode_driver.cc BitFlipCode.ll svsim_wrapper_nvgpu_sin.cu svsim_nvgpu_sin.cuh config.hpp
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o BitFlipCode.o -c BitFlipCode.ll
@@ -69,6 +127,7 @@ Grover_sin: Grover_driver.cc Grover.ll svsim_wrapper_nvgpu_sin.cu svsim_nvgpu_si
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover.o -c Grover.ll
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover_driver.o -c Grover_driver.cc
 	$(NVCC) $(NVCC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper_nvgpu_sin.cu Grover.o Grover_driver.o -o $@
+
 
 HiddenShift_sin: HiddenShift_driver.cc HiddenShift.ll svsim_wrapper_nvgpu_sin.cu svsim_nvgpu_sin.cuh config.hpp
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o HiddenShift.o -c HiddenShift.ll

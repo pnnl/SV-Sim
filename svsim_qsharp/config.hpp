@@ -15,8 +15,18 @@
 #ifndef CONFIG_HPP
 #define CONFIG_HPP
 
+//Backend
+#define USE_NVGPU
+#define USE_OMP
+
+//Number of PEs: CPUs, GPUs, Nodes
+#define N_PE 2
+
+//Which GPU for single
+#define I_GPU 4
+
 //Track per circuit execution performance
-//#define PRINT_MEA_PER_CIRCUIT
+#define PRINT_MEA_PER_CIRCUIT
 
 //Error check for all NVIDIA CUDA Runtim-API calls and Kernel check
 #define CUDA_ERROR_CHECK
@@ -25,13 +35,11 @@
 namespace SVSim 
 {
 //Number of max qubits
-#define N_QUBIT_SLOT 28
-//Which GPU
-#define I_GPU 0
+//#define N_QUBIT_SLOT 28
+#define N_QUBIT_SLOT 10
 //Random seed
 #define RAND_SEED time(0)
-
-
+//Number of threads per thread block
 #define THREADS_PER_BLOCK 256
 
 //#if N_QUBIT_SLOT <= 12
@@ -49,6 +57,9 @@ namespace SVSim
 using IdxType = unsigned long long;
 //Basic Type for value, expect to support half, float and double
 using ValType = double;
+
+//Max IdxType
+#define MAX_IDX 0xffffffffffffffff
 
 // constant value of PI
 #define PI 3.14159265358979323846
