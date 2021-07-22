@@ -1301,6 +1301,10 @@ inline void ControlledAdjointT_GATE(const Gate* g, const Simulation* sim, ValTyp
 
 //============== Swap Gate ================
 //Swap the position of two qubits
+// [1,0,0,0]
+// [0,0,1,0]
+// [0,1,0,0]
+// [0,0,0,1]
 //This is for qubit refinement when release or rearrange
 inline void SWAP_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
@@ -1308,14 +1312,14 @@ inline void SWAP_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, Va
     const IdxType qubit2 = g->mask; 
     assert (qubit1 != qubit2); //Non-cloning
     const IdxType tid = 0;
-    const IdxType q0dim = (1 << max(qubit1, qubit2) );
-    const IdxType q1dim = (1 << min(qubit1, qubit2) );
+    const IdxType q0dim = ((IdxType)1 << max(qubit1, qubit2) );
+    const IdxType q1dim = ((IdxType)1 << min(qubit1, qubit2) );
     assert (qubit1 != qubit2); //Non-cloning
     const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
     const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
     const IdxType inner_factor = q1dim;
-    const IdxType qubit1_dim = (1 << qubit1);
-    const IdxType qubit2_dim = (1 << qubit2);
+    const IdxType qubit1_dim = ((IdxType)1 << qubit1);
+    const IdxType qubit2_dim = ((IdxType)1 << qubit2);
 
     #pragma omp for schedule(auto) 
     for (IdxType i = tid; i < outer_factor * mider_factor * inner_factor; i+=1)
@@ -1337,15 +1341,15 @@ inline void SWAP_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, Va
         const ValType el3_real = sv_real[pos3]; 
         const ValType el3_imag = sv_imag[pos3];
         //Real part
-        sv_real[pos0] = el2_real;
-        sv_real[pos1] = el3_real; 
-        sv_real[pos2] = el0_real;
-        sv_real[pos3] = el1_real;
+        sv_real[pos0] = el0_real;
+        sv_real[pos1] = el2_real; 
+        sv_real[pos2] = el1_real;
+        sv_real[pos3] = el3_real;
         //Imag part
-        sv_imag[pos0] = el2_imag;
-        sv_imag[pos1] = el3_imag; 
-        sv_imag[pos2] = el0_imag;
-        sv_imag[pos3] = el1_imag;
+        sv_imag[pos0] = el0_imag;
+        sv_imag[pos1] = el2_imag; 
+        sv_imag[pos2] = el1_imag;
+        sv_imag[pos3] = el3_imag;
     }
 }
 

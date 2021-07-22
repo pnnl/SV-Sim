@@ -1377,8 +1377,11 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Gate* g, const Simulati
 
 //============== Swap Gate ================
 //Swap the position of two qubits
+// [1,0,0,0]
+// [0,0,1,0]
+// [0,1,0,0]
+// [0,0,0,1]
 //This is for qubit refinement when release or rearrange
-
 __device__ __inline__ void SWAP_GATE(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
     const IdxType qubit1 = g->qubit; 
@@ -1416,15 +1419,15 @@ __device__ __inline__ void SWAP_GATE(const Gate* g, const Simulation* sim, ValTy
         const ValType el3_imag = sv_imag[pos3];
 
         //Real part
-        sv_real[pos0] = el2_real;
-        sv_real[pos1] = el3_real; 
-        sv_real[pos2] = el0_real;
-        sv_real[pos3] = el1_real;
+        sv_real[pos0] = el0_real;
+        sv_real[pos1] = el2_real; 
+        sv_real[pos2] = el1_real;
+        sv_real[pos3] = el3_real;
         //Imag part
-        sv_imag[pos0] = el2_imag;
-        sv_imag[pos1] = el3_imag; 
-        sv_imag[pos2] = el0_imag;
-        sv_imag[pos3] = el1_imag;
+        sv_imag[pos0] = el0_imag;
+        sv_imag[pos1] = el2_imag; 
+        sv_imag[pos2] = el1_imag;
+        sv_imag[pos3] = el3_imag;
     }
     grid.sync();
 }

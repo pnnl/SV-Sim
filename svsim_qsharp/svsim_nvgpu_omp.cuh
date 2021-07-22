@@ -50,6 +50,7 @@ enum OP  //32 gates + measure
     ControlledEY, ControlledEZ, //2
     AdjointS, AdjointT, //2
     ControlledAdjointS, ControlledAdjointT, //2
+    Swap, //1
     Measure //1
 };
 
@@ -65,7 +66,7 @@ const char *OP_NAMES[] = {
     "ControlledEY", "ControlledEZ", 
     "AdjointS", "AdjointT", 
     "ControlledAdjointS", "ControlledAdjointT", 
-    "Measure"
+    "Swap", "Measure"
 };
 
 //Define gate function pointers
@@ -101,6 +102,7 @@ extern __device__ func_t pAdjointS;
 extern __device__ func_t pAdjointT;
 extern __device__ func_t pControlledAdjointS;
 extern __device__ func_t pControlledAdjointT;
+extern __device__ func_t pSwap;
 extern __device__ func_t pMeasure;
 
    
@@ -149,7 +151,7 @@ public:
     ~Circuit() { clear(); }
     void append(Gate& g)
     {
-        //printf("%s(theta:%lf,q:%lu,mask:%lu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
+        printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
         if (g.qubit >= n_qubits) 
         {
             printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
@@ -160,13 +162,13 @@ public:
     }
     void AllocateQubit() 
     { 
-        n_qubits++; 
-        //printf("allocate 1 qubit, now in total: %lu\n",n_qubits);
+        ++n_qubits; 
+        printf("allocate 1 qubit, now in total: %llu\n",n_qubits);
     }
     void ReleaseQubit()
     {
         --n_qubits;
-        //printf("release 1 qubit, now in total: %lu\n", n_qubits);
+        printf("release 1 qubit, now in total: %llu\n", n_qubits);
     }
     void clear()
     {
@@ -207,7 +209,7 @@ public:
 class Simulation
 {
 public:
-    Simulation(IdxType _n_gpus, IdxType _n_qubits=N_QUBIT_SLOT) : 
+    Simulation(IdxType _n_gpus=N_PE, IdxType _n_qubits=N_QUBIT_SLOT) : 
         n_qubits(_n_qubits), n_gpus(_n_gpus),
         dim((IdxType)1<<(n_qubits)), 
         half_dim((IdxType)1<<(n_qubits-1)),
@@ -306,6 +308,7 @@ public:
         SAFE_ALOC_HOST(gAdjointT, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gControlledAdjointS, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gControlledAdjointT, sizeof(func_t)*n_gpus);
+        SAFE_ALOC_HOST(gSwap, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gMeasure, sizeof(func_t)*n_gpus);
         SetupGatePointers();
 
@@ -371,6 +374,7 @@ public:
         SAFE_FREE_HOST(gAdjointT);
         SAFE_FREE_HOST(gControlledAdjointS);
         SAFE_FREE_HOST(gControlledAdjointT);
+        SAFE_FREE_HOST(gSwap);
         SAFE_FREE_HOST(gMeasure);
     }
     void AllocateQubit()
@@ -381,9 +385,14 @@ public:
             circuit_handle[d]->AllocateQubit();
         }
     }
-    void ReleaseQubit(IdxType qubit)
+    void ReleaseQubit()
     {
         //printf("release 1 qubit at: %lu\n", qubit);
+        for (unsigned d=0; d<n_gpus; d++)
+        {
+            circuit_handle[d]->ReleaseQubit();
+        }
+
     }
     void SetupGatePointers()
     {
@@ -422,6 +431,7 @@ public:
             cudaSafeCall(cudaMemcpyFromSymbol(&gAdjointT[d], pAdjointT, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointS[d], pControlledAdjointS, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointT[d], pControlledAdjointT, sizeof(func_t))); 
+            cudaSafeCall(cudaMemcpyFromSymbol(&gSwap[d], pSwap, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gMeasure[d], pMeasure, sizeof(func_t))); 
         }
     }
@@ -685,6 +695,14 @@ public:
             circuit_handle[d]->append(*G);
         }
     }
+    void Swap(IdxType qubit0, IdxType qubit1)
+    {
+        for (unsigned d=0; d<n_gpus; d++)
+        {
+            Gate* G = new Gate(OP::Swap,gSwap[d],qubit0,0,qubit1);
+            circuit_handle[d]->append(*G);
+        }
+    }
     void Measure(IdxType qubit, ValType rand, IdxType pauli)
     {
         for (unsigned d=0; d<n_gpus; d++)
@@ -697,14 +715,6 @@ public:
     // =============================== End of Gate Define ===================================
     void reset()
     {
-        //printf("%lu qubits are to be released in reset\n", circuit_handle->n_qubits);
-
-        for (unsigned d=0; d<n_gpus; d++)
-        {
-            IdxType qubits_to_release = circuit_handle[d]->n_qubits;
-            for (IdxType i=0; i<qubits_to_release; i++)
-                circuit_handle[d]->ReleaseQubit();
-        }
         //Reset CPU input & output
         memset(sv_real_cpu, 0, sv_size);
         memset(sv_imag_cpu, 0, sv_size);
@@ -727,6 +737,16 @@ public:
         circuit_handle[i_gpu]->clear();
         //printf("Circuit is reset!\n");
     }
+    IdxType get_n_qubits()
+    {
+        //by default we return value at GPU-0
+        return circuit_handle[0]->n_qubits;
+    }
+    IdxType get_n_gates()
+    {
+        //by default we return value at GPU-0
+        return circuit_handle[0]->n_gates;
+    }
     void update(const IdxType _n_qubits, const IdxType _n_gates)
     {
         assert(_n_qubits < N_QUBIT_SLOT);
@@ -738,6 +758,12 @@ public:
         this->lg2_m_gpu = _n_qubits - gpu_scale;
         this->m_gpu = (IdxType)1<<(lg2_m_gpu);
         this->sv_size_per_gpu = sv_size/n_gpus;
+        printf("!!! update: dim:%llu n_gpus:%llu, lg2_m_gpu:%llu, m_gpu:%llu\n",dim,n_gpus, lg2_m_gpu, m_gpu);
+        if (dim % n_gpus != 0)
+        {
+            std::cerr << "Error: Number of GPUs is too large or too small." << std::endl;
+            exit(1);
+        }
     }
     std::string circuitToString()
     {
@@ -747,7 +773,6 @@ public:
     ValType sim()
     {
         //printf("before update is n_qubits: %lu, n_gates: %lu\n",n_qubits, n_gates);
-
         assert(circuit_handle[0] != NULL);
         update(circuit_handle[0]->n_qubits, circuit_handle[0]->n_gates);
 
@@ -818,6 +843,8 @@ public:
             {
                 //Copy back
                 cudaSafeCall(cudaMemcpy(&res_prob, m_real[d], sizeof(ValType), cudaMemcpyDeviceToHost));
+
+                printf("$$$$$$$$$$ res_prob:%lf $$$$$$$$\n",res_prob);
                 cudaSafeCall(cudaDeviceSynchronize());
             }
             reset_circuit(d);
@@ -832,8 +859,8 @@ public:
 
 #ifdef PRINT_MEA_PER_CIRCUIT
         printf("\n============== SVsim ===============\n");
-        printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
-                n_qubits, n_gates, 1, avg_sim_time, 0., 
+        printf("nqubits:%llu, ngates:%llu, ngpus:%llu, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
+                n_qubits, n_gates, n_gpus, avg_sim_time, 0., 
                 avg_sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024, res_prob);
         printf("=====================================\n");
 #endif
@@ -864,7 +891,7 @@ public:
         SAFE_ALOC_HOST(sv_scan, (dim+1)*sizeof(ValType));
         sv_scan[0] = 0;
         for (IdxType i=1; i<dim+1; i++)
-            sv_scan[i] = sv_scan[i-1]+(sv_real_cpu[i-1]*sv_real_cpu[i-1]);
+            sv_scan[i] = sv_scan[i-1]+(sv_real_cpu[i-1]*sv_real_cpu[i-1] + sv_imag_cpu[i-1]*sv_imag_cpu[i-1]);
         srand(RAND_SEED);
         IdxType* res_state = new IdxType[repetition];
         memset(res_state, 0, (repetition*sizeof(IdxType)));
@@ -908,7 +935,7 @@ public:
     func_t *gControlledRI, *gControlledRX, *gControlledRY, *gControlledRZ;
     func_t *gControlledEI, *gControlledEX, *gControlledEY, *gControlledEZ;
     func_t *gAdjointS, *gAdjointT, *gControlledAdjointS, *gControlledAdjointT;
-    func_t *gMeasure;
+    func_t *gSwap, *gMeasure;
 
 public:
     // n_qubits is the number of qubits
@@ -958,26 +985,26 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
             IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-            IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
 #define OP_HEAD_MASK multi_grid_group grid = this_multi_grid(); \
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
             IdxType pos0_src = offset + inner; \
             if (((~(pos0_src&mask))&mask) != 0) continue; \
             IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-            IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
 
 //Define MG-BSP machine operation footer
 #define OP_TAIL  } grid.sync(); 
@@ -1666,6 +1693,72 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Gate* g, const Simulati
     OP_TAIL;
 }
 
+//============== Swap Gate ================
+//Swap the position of two qubits
+// [1,0,0,0]
+// [0,0,1,0]
+// [0,1,0,0]
+// [0,0,0,1]
+//This is for qubit refinement when release or rearrange
+__device__ __inline__ void SWAP_GATE(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    const IdxType qubit1 = g->qubit; 
+    const IdxType qubit2 = g->mask; 
+    assert (qubit1 != qubit2); //Non-cloning
+    multi_grid_group grid = this_multi_grid(); 
+    const IdxType q0dim = ((IdxType)1 << max(qubit1, qubit2) );
+    const IdxType q1dim = ((IdxType)1 << min(qubit1, qubit2) );
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType inner_factor = q1dim;
+    const IdxType qubit1_dim = ((IdxType)1 << qubit1);
+    const IdxType qubit2_dim = ((IdxType)1 << qubit2);
+
+    for (IdxType i = grid.thread_rank(); i < outer_factor * mider_factor * inner_factor; 
+            i+=grid.size())
+    {
+        IdxType outer = ((i/inner_factor) / (mider_factor)) * (q0dim+q0dim);
+        IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
+        IdxType inner = i % inner_factor;
+        IdxType pos0_org = outer + mider + inner;
+        IdxType pos1_org = outer + mider + inner + qubit2_dim;
+        IdxType pos2_org = outer + mider + inner + qubit1_dim;
+        IdxType pos3_org = outer + mider + inner + q0dim + q1dim;
+
+        IdxType pos0_gid = (pos0_org >> (sim->lg2_m_gpu));
+        IdxType pos1_gid = (pos1_org >> (sim->lg2_m_gpu));
+        IdxType pos2_gid = (pos2_org >> (sim->lg2_m_gpu));
+        IdxType pos3_gid = (pos3_org >> (sim->lg2_m_gpu));
+
+        IdxType pos0 = (pos0_org & (sim->m_gpu-1));
+        IdxType pos1 = (pos1_org & (sim->m_gpu-1));
+        IdxType pos2 = (pos2_org & (sim->m_gpu-1));
+        IdxType pos3 = (pos3_org & (sim->m_gpu-1));
+
+        const ValType el0_real = sv_real[pos0_gid][pos0]; 
+        const ValType el0_imag = sv_imag[pos0_gid][pos0];
+        const ValType el1_real = sv_real[pos1_gid][pos1]; 
+        const ValType el1_imag = sv_imag[pos1_gid][pos1];
+        const ValType el2_real = sv_real[pos2_gid][pos2]; 
+        const ValType el2_imag = sv_imag[pos2_gid][pos2];
+        const ValType el3_real = sv_real[pos3_gid][pos3]; 
+        const ValType el3_imag = sv_imag[pos3_gid][pos3];
+
+        //Real part
+        sv_real[pos0_gid][pos0] = el0_real;
+        sv_real[pos1_gid][pos1] = el2_real;
+        sv_real[pos2_gid][pos2] = el1_real;
+        sv_real[pos3_gid][pos3] = el3_real;
+
+        //Imag part
+        sv_imag[pos0_gid][pos0] = el0_imag;
+        sv_imag[pos1_gid][pos1] = el2_imag;
+        sv_imag[pos2_gid][pos2] = el1_imag; 
+        sv_imag[pos3_gid][pos3] = el3_imag; 
+    }
+    grid.sync();
+}
+
 //============== H Gate ================
 //For measurement purpose
 
@@ -1723,11 +1816,11 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     IdxType pauli = g->mask;
     const int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1UL)])
+#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1)])
 
     ValType** m_real = sim->m_real;
 
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {
@@ -1762,9 +1855,9 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
 
     grid.sync();
 
-    //if (tid ==0 ) printf("m_real[%d] is:%lf\n",tid,m_real[tid]);
     ValType prob_of_one = m_real[0][0];
     grid.sync();
+    if (tid ==0 ) printf("m_real[%d] is:%lf for qubit:%llu with mask:%llu \n",tid,prob_of_one, qubit, mask);
 
     //Now m_real[0] should have the probability of being 1
     bool val = (rand < prob_of_one);
@@ -1872,6 +1965,7 @@ __device__ func_t pAdjointS = AdjointS_GATE;
 __device__ func_t pAdjointT = AdjointT_GATE;
 __device__ func_t pControlledAdjointS = ControlledAdjointS_GATE;
 __device__ func_t pControlledAdjointT = ControlledAdjointT_GATE;
+__device__ func_t pSwap = SWAP_GATE;
 __device__ func_t pMeasure = Measure_GATE;
 //=====================================================================================
 
