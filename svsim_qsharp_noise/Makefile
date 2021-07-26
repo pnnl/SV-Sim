@@ -51,12 +51,12 @@ OBJ = Grover_cpu
 
 all: $(OBJ) 
 
-Grover_cpu: Grover_driver.cc Grover.ll svsim_qsharp_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
+Grover_cpu: Grover_driver.cc Grover.ll svsim_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover.o -c Grover.ll
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover_driver.o -c Grover_driver.cc
 	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper.cpp Grover.o Grover_driver.o -o $@
 
-TeleportationSample_cpu: TeleportationSample_driver.cc TeleportationSample.ll svsim_qsharp_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
+TeleportationSample_cpu: TeleportationSample_driver.cc TeleportationSample.ll svsim_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample.o -c TeleportationSample.ll
 	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample_driver.o -c TeleportationSample_driver.cc
 	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper.cpp TeleportationSample.o TeleportationSample_driver.o -o $@
