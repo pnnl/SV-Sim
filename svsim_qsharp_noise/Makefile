@@ -17,6 +17,11 @@ NVCC = nvcc
 # Should adjust -arch=sm_XX based on NVIDIA GPU compute capability
 NVCC_FLAGS = -O3 -arch=sm_80 -m64 -std=c++14 -rdc=true --compiler-options -fPIC
 
+# CPU Compiler
+CC = g++
+CC_FLAGS = -O3 -m64 -std=c++14 -fPIC -fopenmp
+
+
 # QIR requires Clang, QIR and QIR-Bridge
 QIRCC = clang++
 QIRCC_FLAGS = -std=c++17 -m64 -O3 -I. -I$(QIR_BRIDGE_PUBLIC) -I$(QIR_BRIDGE_TEST) -I$(MPI_INC) -fPIC
@@ -34,7 +39,9 @@ QIR_BRIDGE_FLAGS = -I. -I$(QIR_BRIDGE_PUBLIC) -L$(QIR_BRIDGE_BUILD)/lib/QIR -L$(
 
 #OBJ = unit_test
 #OBJ = adder_n10_nvgpu_sin
-OBJ = BitFlipCode_sin
+#OBJ = BitFlipCode_sin
+#OBJ = TeleportationSample_cpu
+OBJ = Grover_cpu
 
 #To test: VariationalQuantumEigensolver_sin BitFlipCode_sin OrderFinding_sin HiddenShift_sin ReversibleLogicSynthesis_sin OracleSynthesis_sin
 
@@ -43,6 +50,21 @@ OBJ = BitFlipCode_sin
 #Correct Qrng_sin BitFlipCode_sin SimpleAlgorithms_sin Measurement_sin OrderFinding_sin SimpleGroverSample_sin Grover_sin HiddenShift_sin IsingModel_sin ParallelQrng_sin QAOA_sin ReversibleLogicSynthesis_sin OracleSynthesis_sin RepeatUntilSuccess_sin 
 
 all: $(OBJ) 
+
+Grover_cpu: Grover_driver.cc Grover.ll svsim_qsharp_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover.o -c Grover.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o Grover_driver.o -c Grover_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper.cpp Grover.o Grover_driver.o -o $@
+
+TeleportationSample_cpu: TeleportationSample_driver.cc TeleportationSample.ll svsim_qsharp_wrapper.cpp svsim_cpu_sin.hpp svsim_cpu_omp.hpp config.hpp
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample.o -c TeleportationSample.ll
+	$(QIRCC) $(QIRCC_FLAGS) -I$(QIR_BRIDGE_PUBLIC) -o TeleportationSample_driver.o -c TeleportationSample_driver.cc
+	$(CC) $(CC_FLAGS) $(QIR_BRIDGE_FLAGS) $(LIBS) svsim_wrapper.cpp TeleportationSample.o TeleportationSample_driver.o -o $@
+
+
+
+
+
 
 
 unit_test: unit_test_nvgpu_sin.cu svsim_nvgpu_sin.cuh config.hpp util_nvgpu.cuh
