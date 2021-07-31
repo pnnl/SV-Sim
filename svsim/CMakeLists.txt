@@ -14,8 +14,9 @@
 # NVSHMEM requires CMAKE 3.11
 CMAKE_MINIMUM_REQUIRED(VERSION 3.11)
 
+
 #================================== Configuration =======================================
-SET(CMAKE_C_COMPILER "/usr/bin/gcc")
+#SET(CMAKE_C_COMPILER "/usr/bin/gcc")
 SET(CMAKE_CXX_COMPILER "/usr/bin/g++")
 
 MESSAGE(STATUS "CMake version: ${CMAKE_VERSION}")
@@ -32,7 +33,7 @@ OPTION(USE_NVGPU "Use NVIDIA GPU backend" OFF)
 OPTION(USE_AMDGPU "Use AMD GPU backend" OFF)
 
 # Define OMP/MPI
-OPTION(USE_OPENMP "Use OpenMP for scale-up" OFF)
+OPTION(USE_OPENMP "Use OpenMP for scale-up" ON)
 OPTION(USE_MPI "Use MPI for scale-out" OFF)
 
 # AVX512 for CPU backend
@@ -85,9 +86,9 @@ ENDIF()
 # OpenMP
 IF(USE_OPENMP)
     FIND_PACKAGE(OpenMP REQUIRED)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fopenmp")
+    #SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xpreprocessor -fopenmp")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lomp")
 ENDIF()
 
 # X86 CPU with AVX512
