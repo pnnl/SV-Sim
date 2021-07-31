@@ -12,6 +12,7 @@
 # ---------------------------------------------------------------------------
 
 # NVSHMEM requires CMAKE 3.11
+MESSAGE(STATUS "CMake version: ${CMAKE_VERSION}")
 CMAKE_MINIMUM_REQUIRED(VERSION 3.11)
 
 #================================== Configuration =======================================
@@ -19,30 +20,30 @@ SET(CMAKE_C_COMPILER "/usr/bin/gcc")
 SET(CMAKE_CXX_COMPILER "/usr/bin/g++")
 SET(CMAKE_C_COMPILER_FORCED TRUE)
 
-MESSAGE(STATUS "CMake version: ${CMAKE_VERSION}")
-PROJECT(SVSim VERSION 2.4 LANGUAGES CXX)
-
+# ==================================================================
 # Define frontend
 OPTION(USE_CXX "Use C++ frontend" ON)
 OPTION(USE_PYTHON "Use Python frontend" OFF)
 OPTION(USE_QIR "Use QIR (Q#/QDK) frontend" OFF)
 
 # Define backend
-OPTION(USE_CPU "Use CPU backend" ON)
-OPTION(USE_NVGPU "Use NVIDIA GPU backend" OFF)
+OPTION(USE_CPU "Use CPU backend" OFF)
+OPTION(USE_NVGPU "Use NVIDIA GPU backend" ON)
 OPTION(USE_AMDGPU "Use AMD GPU backend" OFF)
 
 # Define OMP/MPI
-OPTION(USE_OPENMP "Use OpenMP for scale-up" OFF)
+OPTION(USE_OPENMP "Use OpenMP for scale-up" ON)
 OPTION(USE_MPI "Use MPI/SHMEM for scale-out" OFF)
 
 # AVX512 for CPU backend
 OPTION(USE_AVX512 "Accelerated by AVX512 on X86-CPU platforms" OFF)
 
-# Define NVIDIA GPU Arch
-SET(CUDA_ARCH_BIN 70)
-IF (NOT DEFINED ${CMAKE_CUDA_ARCHITECTURES})
-    SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_BIN})
+# ==================================================================
+
+IF (USE_NVGPU)
+    PROJECT(SVSim VERSION 2.4 LANGUAGES CXX CUDA)
+ELSE()
+    PROJECT(SVSim VERSION 2.4 LANGUAGES CXX)
 ENDIF()
 
 # Define Clang++ for Q#/QIR
@@ -107,6 +108,11 @@ ENDIF()
 # NVIDIA GPU Backend
 IF(USE_NVGPU)
     FIND_PACKAGE(CUDA REQUIRED)
+    SET(CUDA_ARCH_BIN 70)
+    IF (NOT DEFINED ${CMAKE_CUDA_ARCHITECTURES})
+        SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_BIN})
+    ENDIF()
+
     SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_${CUDA_ARCH_BIN},code=sm_${CUDA_ARCH_BIN} -rdc=true --compiler-options -fPIC")
     IF(USE_OPENMP)
         SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp")
