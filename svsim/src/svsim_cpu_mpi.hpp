@@ -194,7 +194,7 @@ public:
 class Simulation
 {
 public:
-    Simulation(IdxType _n_qubits) 
+    Simulation(IdxType _n_qubits, IdxType) 
         : // comm_global(MPI_COMM_WORLD),
         n_qubits(_n_qubits), 
         dim((IdxType)1<<(n_qubits)), 

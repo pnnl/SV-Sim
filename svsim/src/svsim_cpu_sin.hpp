@@ -193,7 +193,7 @@ public:
 class Simulation
 {
 public:
-    Simulation(IdxType _n_qubits) 
+    Simulation(IdxType _n_qubits, IdxType) 
         : n_qubits(_n_qubits), 
         dim((IdxType)1<<(n_qubits)), 
         half_dim((IdxType)1<<(n_qubits-1)),
