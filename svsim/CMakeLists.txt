@@ -14,10 +14,10 @@
 # NVSHMEM requires CMAKE 3.11
 CMAKE_MINIMUM_REQUIRED(VERSION 3.11)
 
-
 #================================== Configuration =======================================
-#SET(CMAKE_C_COMPILER "/usr/bin/gcc")
+SET(CMAKE_C_COMPILER "/usr/bin/gcc")
 SET(CMAKE_CXX_COMPILER "/usr/bin/g++")
+SET(CMAKE_C_COMPILER_FORCED TRUE)
 
 MESSAGE(STATUS "CMake version: ${CMAKE_VERSION}")
 PROJECT(SVSim VERSION 2.4 LANGUAGES CXX)
@@ -86,9 +86,13 @@ ENDIF()
 # OpenMP
 IF(USE_OPENMP)
     FIND_PACKAGE(OpenMP REQUIRED)
-    #SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xpreprocessor -fopenmp")
-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lomp")
+    IF(APPLE)
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xpreprocessor -fopenmp")
+        SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lomp")
+    ELSE()
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+        SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fopenmp")
+    ENDIF()
 ENDIF()
 
 # X86 CPU with AVX512
