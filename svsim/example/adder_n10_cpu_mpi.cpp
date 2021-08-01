@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     srand(RAND_SEED);
 
     //Obtain a simulator object
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits, 0);
 
     //Add the gates to the circuit
     sim.append(Simulation::X(1));

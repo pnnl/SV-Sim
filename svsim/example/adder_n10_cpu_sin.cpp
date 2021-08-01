@@ -39,7 +39,7 @@ int main()
     int n_qubits = 10;
 
     //Obtain a simulator object
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits, 0);
 
     //Add the gates to the circuit
     sim.append(Simulation::X(1));
