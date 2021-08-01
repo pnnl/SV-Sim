@@ -28,7 +28,7 @@
 #include "svsim_nvgpu_sin.cuh"
 #endif
 #elif defined USE_AMDGPU //AMDGPU
-#include "util_amdgpu.h"
+#include "util_amdgpu.hpp"
 #ifdef USE_OMP//OMP
 #include "svsim_amdgpu_omp.hpp"
 #elif defined USE_MPI//MPI

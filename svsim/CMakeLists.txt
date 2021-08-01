@@ -17,18 +17,18 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.11)
 
 #================================== Configuration =======================================
 # Define frontend
-OPTION(USE_CXX "Use C++ frontend" OFF)
-OPTION(USE_PYTHON "Use Python frontend" ON)
+OPTION(USE_CXX "Use C++ frontend" ON)
+OPTION(USE_PYTHON "Use Python frontend" OFF)
 OPTION(USE_QIR "Use QIR (Q#/QDK) frontend" OFF)
 
 # Define backend
-OPTION(USE_CPU "Use CPU backend" OFF)
-OPTION(USE_NVGPU "Use NVIDIA GPU backend" ON)
+OPTION(USE_CPU "Use CPU backend" ON)
+OPTION(USE_NVGPU "Use NVIDIA GPU backend" OFF)
 OPTION(USE_AMDGPU "Use AMD GPU backend" OFF)
 
 # Define OMP/MPI
-OPTION(USE_OPENMP "Use OpenMP for scale-up" ON)
-OPTION(USE_MPI "Use MPI/SHMEM for scale-out" OFF)
+OPTION(USE_OPENMP "Use OpenMP for scale-up" OFF)
+OPTION(USE_MPI "Use MPI/SHMEM for scale-out" ON)
 
 # AVX512 for CPU backend
 OPTION(USE_AVX512 "Accelerated by AVX512 on X86-CPU platforms" OFF)
@@ -83,6 +83,11 @@ IF(USE_MPI)
     FIND_PACKAGE(MPI REQUIRED)
     INCLUDE_DIRECTORIES(SYSTEM ${MPI_INCLUDE_PATH})
     #SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -loshmem")
+    IF(USE_CPU) #This is for Cray-shmem on OLCF Spock
+        INCLUDE_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/include")
+        LINK_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/lib64")
+        SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lsma")
+    ENDIF()
 ENDIF()
 
 # OpenMP
@@ -129,8 +134,8 @@ ENDIF()
 # AMD GPU Backend
 IF(USE_AMDGPU)
     ADD_DEFINITIONS(-DUSE_AMDGPU)
-    FIND_PACKAGE(hip PATHS /opt/rocm-3.10.0/bin)
-    SET(CMAKE_CXX_COMPILER "/opt/rocm-3.10.0/bin/hipcc")
+    FIND_PACKAGE(HIP PATHS /opt/rocm-4.2.0/bin)
+    SET(CMAKE_CXX_COMPILER "/opt/rocm-4.2.0/bin/hipcc")
 ENDIF()
 
 # Python Frontend
