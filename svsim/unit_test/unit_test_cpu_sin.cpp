@@ -44,7 +44,7 @@ bool test_X()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::X(0));
     sim.upload();
     sim.sim();
@@ -62,7 +62,7 @@ bool test_Y()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::Y(0));
     sim.upload();
     sim.sim();
@@ -80,7 +80,7 @@ bool test_Z()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::Z(0));
     sim.upload();
@@ -99,7 +99,7 @@ bool test_H()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.upload();
     sim.sim();
@@ -117,7 +117,7 @@ bool test_S()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::S(0));
     sim.upload();
@@ -136,7 +136,7 @@ bool test_SDG()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::SDG(0));
     sim.upload();
@@ -155,7 +155,7 @@ bool test_T()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::T(0));
     sim.upload();
@@ -174,7 +174,7 @@ bool test_TDG()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::TDG(0));
     sim.upload();
@@ -193,7 +193,7 @@ bool test_RX()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::RX(PI/3.,0));
     sim.upload();
     sim.sim();
@@ -211,7 +211,7 @@ bool test_RY()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::RY(PI/6.,0));
     sim.upload();
     sim.sim();
@@ -230,7 +230,7 @@ bool test_U1()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::U1(PI/5.,0));
     sim.upload();
@@ -249,7 +249,7 @@ bool test_U2()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::U2(PI/4.,PI/5.,0));
     sim.upload();
@@ -268,7 +268,7 @@ bool test_U3()
     const int n_qubits = 1;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::U3(PI/4.,PI/5.,PI/6.,0));
     sim.upload();
@@ -287,7 +287,7 @@ bool test_CX()
     const int n_qubits = 2;
     const int dim = (1<<n_qubits);
     bool pass = true;
-    Simulation sim(n_qubits);
+    Simulation sim(n_qubits,0);
     sim.append(Simulation::H(0));
     sim.append(Simulation::CX(0,1));
     sim.upload();
