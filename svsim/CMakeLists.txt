@@ -22,8 +22,8 @@ OPTION(USE_PYTHON "Use Python frontend" OFF)
 OPTION(USE_QIR "Use QIR (Q#/QDK) frontend" OFF)
 
 # Define backend
-OPTION(USE_CPU "Use CPU backend" ON)
-OPTION(USE_NVGPU "Use NVIDIA GPU backend" OFF)
+OPTION(USE_CPU "Use CPU backend" OFF)
+OPTION(USE_NVGPU "Use NVIDIA GPU backend" ON)
 OPTION(USE_AMDGPU "Use AMD GPU backend" OFF)
 
 # Define OMP/MPI
@@ -34,8 +34,8 @@ OPTION(USE_MPI "Use MPI/SHMEM for scale-out" ON)
 OPTION(USE_AVX512 "Accelerated by AVX512 on X86-CPU platforms" OFF)
 
 # ==================================================================
-SET(CMAKE_C_COMPILER "/usr/bin/gcc")
-SET(CMAKE_CXX_COMPILER "/usr/bin/g++")
+#SET(CMAKE_C_COMPILER "/usr/bin/gcc")
+#SET(CMAKE_CXX_COMPILER "/usr/bin/g++")
 SET(CMAKE_C_COMPILER_FORCED TRUE)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -82,12 +82,27 @@ IF(USE_MPI)
     ADD_DEFINITIONS(-DUSE_MPI)
     FIND_PACKAGE(MPI REQUIRED)
     INCLUDE_DIRECTORIES(SYSTEM ${MPI_INCLUDE_PATH})
+
     #SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -loshmem")
-    IF(USE_CPU) #This is for Cray-shmem on OLCF Spock
-        INCLUDE_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/include")
-        LINK_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/lib64")
-        SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lsma")
+    IF(USE_CPU) 
+        ##====================================
+        ##This is for Cray-shmem on OLCF Spock
+        ##====================================
+        #INCLUDE_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/include")
+        #LINK_DIRECTORIES("/opt/cray/pe/sma/11.3.1/ofi/sma/lib64")
+        #SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lsma")
+        ##====================================
+
+        INCLUDE_DIRECTORIES("/autofs/nccs-svm1_sw/summit/.swci/1-compute/opt/spack/20180914/linux-rhel7-ppc64le/xl-16.1.1-5/spectrum-mpi-10.3.1.2-20200121-p6nrnt6vtvkn356wqg6f74n6jspnpjd2/include")
+        LINK_DIRECTORIES("/autofs/nccs-svm1_sw/summit/.swci/1-compute/opt/spack/20180914/linux-rhel7-ppc64le/xl-16.1.1-5/spectrum-mpi-10.3.1.2-20200121-p6nrnt6vtvkn356wqg6f74n6jspnpjd2/lib")
+        SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -loshmem")
+
     ENDIF()
+    IF(USE_NVGPU)
+        INCLUDE_DIRECTORIES("/ccs/home/angli/work/nvshmem/nvshmem_src_2.0.3-0/build/include")
+        LINK_DIRECTORIES("/ccs/home/angli/work/nvshmem/nvshmem_src_2.0.3-0/build/lib/")
+    ENDIF()
+
 ENDIF()
 
 # OpenMP
@@ -128,6 +143,7 @@ IF(USE_NVGPU)
     ENDIF()
     IF(USE_MPI)
         SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -ccbin mpicxx")
+        SET(CMAKE_EXE_LINKER_FLAGS "-lnvshmem -lcuda -lcudart")
     ENDIF()
 ENDIF()
 
@@ -220,7 +236,7 @@ INCLUDE_DIRECTORIES("src")
 
 IF(USE_CXX)
     ADD_SUBDIRECTORY("example")
-    ADD_SUBDIRECTORY("unit_test")
+    #ADD_SUBDIRECTORY("unit_test")
 ENDIF()
 
 #ADD_SUBDIRECTORY("qasmbench")

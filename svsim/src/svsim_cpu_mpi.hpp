@@ -24,8 +24,11 @@
 #include <string.h>
 #include <cstdlib>
 #include <iostream>
-#include <immintrin.h>
 #include <shmem.h>
+#ifdef USE_AVX512
+#include <immintrin.h>
+#endif
+
 
 #include "config.hpp"
 
