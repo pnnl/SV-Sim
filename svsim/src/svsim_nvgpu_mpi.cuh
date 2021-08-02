@@ -208,7 +208,7 @@ public:
 class Simulation
 {
 public:
-    Simulation(IdxType _n_qubits) 
+    Simulation(IdxType _n_qubits, IdxType) 
         : comm_global(MPI_COMM_WORLD),
         n_qubits(_n_qubits), 
         dim((IdxType)1<<(n_qubits)), 
@@ -237,8 +237,7 @@ public:
         n_gpus = nvshmem_n_pes();
         i_gpu = nvshmem_my_pe();
 
-        std::cout << "n_gpus:" << n_gpus << ", i_gpu:" << i_gpu << ", rank:" << rank << std::endl;
-
+        //std::cout << "n_gpus:" << n_gpus << ", i_gpu:" << i_gpu << ", rank:" << rank << std::endl;
         //always be 0 since 1-MPI maps to 1-GPU
         cudaSafeCall(cudaSetDevice(0));
         
@@ -425,11 +424,11 @@ public:
             avg_sim_time /= (double)n_gpus;
 
 #ifdef PRINT_MEA_PER_CIRCUIT
-            printf("\n============== SV-Sim ===============\n");
-            printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
-                    n_qubits, n_gates, n_gpus, avg_sim_time, 0., 
+            printf("\n============== SV-Sim: NVIDIA-GPU-MPI ===============\n");
+            printf("nqubits:%d, ngates:%d, ncores:%d, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
+                    n_qubits, n_gates, n_gpus,
                     avg_sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024/n_gpus);
-            printf("=====================================\n");
+            printf("=======================================================\n");
 #endif
 
             SAFE_FREE_HOST(sim_times);

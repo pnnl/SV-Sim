@@ -35,8 +35,10 @@
 ## We provide a sample Summit lsf file for your reference. 
 ## Have fun on Summit!
 
-module load xl
-module load cuda/10.1.105
+module load cmake
+module load gcc/9.3.0
+module load cuda/11.1
 module load spectrum-mpi
-module load python/2.7.15-anaconda2-5.3.0
+module load python/3.7.0-anaconda3-5.3.0
+source activate svsim
 

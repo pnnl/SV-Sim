@@ -344,11 +344,11 @@ public:
         hipSafeCall(hipDeviceSynchronize());
 
 #ifdef PRINT_MEA_PER_CIRCUIT
-        printf("\n============== SVSim ===============\n");
-        printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
-                n_qubits, n_gates, 1, sim_time, 0., 
+        printf("\n============== SV-Sim: AMD-GPU-SIN ===============\n");
+        printf("nqubits:%d, ngates:%d, ncores:%d, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
+                n_qubits, n_gates, 1, 
                 sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024);
-        printf("=====================================\n");
+        printf("====================================================\n");
 #endif
     }
 

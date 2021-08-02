@@ -413,11 +413,11 @@ public:
             avg_sim_time /= (double)n_gpus;
 
 #ifdef PRINT_MEA_PER_CIRCUIT
-            printf("\n============== SV-Sim ===============\n");
-            printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
-                    n_qubits, n_gates, n_gpus, avg_sim_time, 0., 
+            printf("\n============== SV-Sim: AMD-GPU-MPI ===============\n");
+            printf("nqubits:%d, ngates:%d, ncores:%d, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB\n",
+                    n_qubits, n_gates, n_gpus, 
                     avg_sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024/n_gpus);
-            printf("=====================================\n");
+            printf("====================================================\n");
 #endif
 
             SAFE_FREE_HOST(sim_times);

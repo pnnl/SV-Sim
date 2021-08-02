@@ -1,0 +1,2 @@
+app, qubits, gates, cnots, cores, sim
+bigadder_n18, 18, 284, 130, 32, 471.66910000000007

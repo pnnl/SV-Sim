@@ -295,11 +295,11 @@ public:
         sim_time = sim_timer.measure();
 
 #ifdef PRINT_MEA_PER_CIRCUIT
-        printf("\n============== SV-Sim ===============\n");
-        printf("nqubits:%d, ngates:%d, ncores:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_cpu:%.3lf MB\n",
-                n_qubits, n_gates, 1, sim_time, 0.,
+        printf("\n============== SV-Sim: CPU-SIN ===============\n");
+        printf("nqubits:%d, ngates:%d, ncores:%d, sim:%.3lf ms, mem:%.3lf MB, mem_per_cpu:%.3lf MB\n",
+                n_qubits, n_gates, 1,
                 sim_time, cpu_mem/1024/1024, cpu_mem/1024/1024);
-        printf("=====================================\n");
+        printf("================================================\n");
 #endif
     }
 

@@ -17,8 +17,8 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.11)
 
 #================================== Configuration =======================================
 # Define frontend
-OPTION(USE_CXX "Use C++ frontend" ON)
-OPTION(USE_PYTHON "Use Python frontend" OFF)
+OPTION(USE_CXX "Use C++ frontend" OFF)
+OPTION(USE_PYTHON "Use Python frontend" ON)
 OPTION(USE_QIR "Use QIR (Q#/QDK) frontend" OFF)
 
 # Define backend
@@ -27,8 +27,8 @@ OPTION(USE_NVGPU "Use NVIDIA GPU backend" ON)
 OPTION(USE_AMDGPU "Use AMD GPU backend" OFF)
 
 # Define OMP/MPI
-OPTION(USE_OPENMP "Use OpenMP for scale-up" OFF)
-OPTION(USE_MPI "Use MPI/SHMEM for scale-out" ON)
+OPTION(USE_OPENMP "Use OpenMP for scale-up" ON)
+OPTION(USE_MPI "Use MPI/SHMEM for scale-out" OFF)
 
 # AVX512 for CPU backend
 OPTION(USE_AVX512 "Accelerated by AVX512 on X86-CPU platforms" OFF)
@@ -93,14 +93,22 @@ IF(USE_MPI)
         #SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lsma")
         ##====================================
 
+        ##====================================
+        ##This is for OpenSHMEM on OLCF Summit
+        ##====================================
         INCLUDE_DIRECTORIES("/autofs/nccs-svm1_sw/summit/.swci/1-compute/opt/spack/20180914/linux-rhel7-ppc64le/xl-16.1.1-5/spectrum-mpi-10.3.1.2-20200121-p6nrnt6vtvkn356wqg6f74n6jspnpjd2/include")
         LINK_DIRECTORIES("/autofs/nccs-svm1_sw/summit/.swci/1-compute/opt/spack/20180914/linux-rhel7-ppc64le/xl-16.1.1-5/spectrum-mpi-10.3.1.2-20200121-p6nrnt6vtvkn356wqg6f74n6jspnpjd2/lib")
         SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -loshmem")
+        ##====================================
 
     ENDIF()
     IF(USE_NVGPU)
+        ##====================================
+        ##This is for NVSHMEM on OLCF Summit
+        ##====================================
         INCLUDE_DIRECTORIES("/ccs/home/angli/work/nvshmem/nvshmem_src_2.0.3-0/build/include")
         LINK_DIRECTORIES("/ccs/home/angli/work/nvshmem/nvshmem_src_2.0.3-0/build/lib/")
+        ##====================================
     ENDIF()
 
 ENDIF()
@@ -207,6 +215,7 @@ IF(USE_PYTHON)
         ADD_LIBRARY("svsim" SHARED "src/py_wrapper.cu")
         SET_TARGET_PROPERTIES("svsim" PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
         SET_TARGET_PROPERTIES("svsim" PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        TARGET_LINK_LIBRARIES("svsim" "${CMAKE_EXE_LINKER_FLAGS}")
         TARGET_LINK_LIBRARIES("svsim" ${PYTHON_LIBRARIES})
         IF(USE_OPENMP)
             TARGET_LINK_LIBRARIES("svsim" ${OpenMP_CXX_FLAGS})
