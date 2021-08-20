@@ -1736,13 +1736,11 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
     grid.sync();
 }
 
-
-
 #define DIV2E(x,y) ((x)>>(y))
 #define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
 #define EXP2E(x) ((IdxType)1<<(x))
-#define SV8IDX(x) ((IdxType)1<<( ((x>>2)&1)*r + ((x>>1)&1)*q + ((x&1)*p) ))
-#define SV16IDX(x) ((IdxType)1<<( ((x>>3)&1)*s + ((x>>2)&1)*r + ((x>>1)&1)*q + ((x&1)*p) ))
+#define SV8IDX(x) ( ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
+#define SV16IDX(x) ( ((x>>3)&1)*EXP2E(s) + ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
 
 //============== Unified 3-qubit Gate ================
 //gm_real and gm_imag should be put in constant memory
@@ -1761,7 +1759,7 @@ __device__ __inline__ void C3_GATE(const Simulation* sim, ValType* sv_real, ValT
     const IdxType r = max(max(qubit0, qubit1), qubit2);
     const IdxType q = qubit0 + qubit1 + qubit2 - p - r;
 
-    for (IdxType i = tid; i < ((sim->dim)>>3); i++)
+    for (IdxType i = tid; i < ((sim->dim)>>3); i+=blockDim.x*gridDim.x)
     {
         const IdxType term0 = MOD2E(i,p);
         const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
@@ -1825,7 +1823,7 @@ __device__ __inline__ void C4_GATE(const Simulation* sim, ValType* sv_real, ValT
     const IdxType r = max(min(v2,v3),max(v0,v1)); 
     const IdxType s = max(v2,v3);
 
-    for (IdxType i = tid; i < ((sim->dim)>>4); i++)
+    for (IdxType i = tid; i < ((sim->dim)>>4); i+=blockDim.x*gridDim.x)
     {
         const IdxType term0 = MOD2E(i,p);
         const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);

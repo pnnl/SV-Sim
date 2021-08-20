@@ -719,9 +719,135 @@ void C2_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag,
     }
 }
 
+#define DIV2E(x,y) ((x)>>(y))
+#define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
+#define EXP2E(x) ((IdxType)1<<(x))
+#define SV8IDX(x) ( ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
+#define SV16IDX(x) ( ((x>>3)&1)*EXP2E(s) + ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
 
+//============== Unified 3-qubit Gate ================
+//gm_real and gm_imag should be put in constant memory
+void C3_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2)
+{
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
 
+    //need to sort qubits: min->max: p, q, r
+    const IdxType p = min(min(qubit0, qubit1), qubit2);
+    const IdxType r = max(max(qubit0, qubit1), qubit2);
+    const IdxType q = qubit0 + qubit1 + qubit2 - p - r;
 
+    //printf("p:%llu,r:%llu,q:%llu,sim:%llu\n",p,r,q,sim->dim);
+    for (IdxType i = 0; i < ((sim->dim)>>3); i++)
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(r+1);
+        const IdxType term = term3 + term2 + term1 + term0;
+
+        //printf("term0:%llu,term1:%llu,term2:%llu,term3:%llu\n",term0,term1,term2,term3);
+        register ValType el_real[8] = { 
+            sv_real[term+SV8IDX(0)], sv_real[term+SV8IDX(1)],
+            sv_real[term+SV8IDX(2)], sv_real[term+SV8IDX(3)],
+            sv_real[term+SV8IDX(4)], sv_real[term+SV8IDX(5)],
+            sv_real[term+SV8IDX(6)], sv_real[term+SV8IDX(7)]
+        };
+        register ValType el_imag[8] = { 
+            sv_imag[term+SV8IDX(0)], sv_imag[term+SV8IDX(1)],
+            sv_imag[term+SV8IDX(2)], sv_imag[term+SV8IDX(3)],
+            sv_imag[term+SV8IDX(4)], sv_imag[term+SV8IDX(5)],
+            sv_imag[term+SV8IDX(6)], sv_imag[term+SV8IDX(7)]
+        };
+
+        //for (int a=0; a<8; a++) printf(" [%llu]:%.0lf",SV8IDX(a),el_real[a]);
+        #pragma unroll
+        for (unsigned j=0; j<8; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<8; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*8+k]) - (el_imag[k] * gm_imag[j*8+k]);
+                res_imag += (el_real[k] * gm_imag[j*8+k]) + (el_imag[k] * gm_real[j*8+k]);
+            }
+            sv_real[term+SV8IDX(j)] = res_real;
+            sv_imag[term+SV8IDX(j)] = res_imag;
+        }
+    }
+}
+
+void C4_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2, const IdxType qubit3)
+{
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit0 != qubit3); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
+    assert (qubit1 != qubit3); //Non-cloning
+    assert (qubit2 != qubit3); //Non-cloning
+
+    //need to sort qubits: min->max: p, q, r, s
+    const IdxType v0 = min(qubit0, qubit1);
+    const IdxType v1 = min(qubit2, qubit3);
+    const IdxType v2 = max(qubit0, qubit1);
+    const IdxType v3 = max(qubit2, qubit3);
+    const IdxType p = min(v0,v1); 
+    const IdxType q = min(min(v2,v3),max(v0,v1)); 
+    const IdxType r = max(min(v2,v3),max(v0,v1)); 
+    const IdxType s = max(v2,v3);
+
+    //printf("p:%llu,q:%llu,r:%llu,s:%llu,sim:%llu\n",p,q,r,s,sim->dim);
+    for (IdxType i = 0; i < ((sim->dim)>>4); i++)
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = MOD2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(r+1);
+        const IdxType term4 = DIV2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(s+1);
+        const IdxType term = term4 + term3 + term2 + term1 + term0;
+
+        register ValType el_real[16] = { 
+            sv_real[term+SV16IDX(0)],  sv_real[term+SV16IDX(1)],
+            sv_real[term+SV16IDX(2)],  sv_real[term+SV16IDX(3)],
+            sv_real[term+SV16IDX(4)],  sv_real[term+SV16IDX(5)],
+            sv_real[term+SV16IDX(6)],  sv_real[term+SV16IDX(7)],
+            sv_real[term+SV16IDX(8)],  sv_real[term+SV16IDX(9)],
+            sv_real[term+SV16IDX(10)], sv_real[term+SV16IDX(11)],
+            sv_real[term+SV16IDX(12)], sv_real[term+SV16IDX(13)],
+            sv_real[term+SV16IDX(14)], sv_real[term+SV16IDX(15)]
+        };
+        register ValType el_imag[16] = { 
+            sv_imag[term+SV16IDX(0)],  sv_imag[term+SV16IDX(1)],
+            sv_imag[term+SV16IDX(2)],  sv_imag[term+SV16IDX(3)],
+            sv_imag[term+SV16IDX(4)],  sv_imag[term+SV16IDX(5)],
+            sv_imag[term+SV16IDX(6)],  sv_imag[term+SV16IDX(7)],
+            sv_imag[term+SV16IDX(8)],  sv_imag[term+SV16IDX(9)],
+            sv_imag[term+SV16IDX(10)], sv_imag[term+SV16IDX(11)],
+            sv_imag[term+SV16IDX(12)], sv_imag[term+SV16IDX(13)],
+            sv_imag[term+SV16IDX(14)], sv_imag[term+SV16IDX(15)]
+        };
+        #pragma unroll
+        for (unsigned j=0; j<16; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<16; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*16+k]) - (el_imag[k] * gm_imag[j*16+k]);
+                res_imag += (el_real[k] * gm_imag[j*16+k]) + (el_imag[k] * gm_real[j*16+k]);
+            }
+            sv_real[term+SV16IDX(j)] = res_real;
+            sv_imag[term+SV16IDX(j)] = res_imag;
+        }
+    }
+}
 
 //============== CX Gate ================
 //Controlled-NOT or CNOT
@@ -2442,6 +2568,29 @@ void CH_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_i
 
 void CCX_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
 {
+    //ValType gm_real[64] = { 
+        //0.5000000000000001, 0.0, 0.5000000000000001, 0.0, 0.5000000000000001,
+        //0.0, 0.5000000000000001, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        //0.5000000000000001, 0.0, -0.5000000000000001, -0.0, 0.5000000000000001,
+        //0.0, -0.5000000000000001, -0.0, 0.0, 0.0, -0.0, -0.0, 0.0, 0.0, -0.0,
+        //-0.0, 0.5000000000000001, 0.0, 0.5000000000000001, 0.0,
+        //-0.5000000000000001, -0.0, -0.5000000000000001, -0.0, 0.0, 0.0, 0.0, 0.0,
+        //-0.0, -0.0, -0.0, -0.0, 0.5000000000000001, 0.0, -0.5000000000000001,
+        //-0.0, -0.5000000000000001, -0.0, 0.5000000000000001, 0.0, 0.0, 0.0, -0.0,
+        //-0.0, -0.0, -0.0, 0.0, 0.0
+    //};
+    //ValType gm_imag[64] = {
+        //0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5000000000000001, 0.0,
+        //0.5000000000000001, 0.0, 0.5000000000000001, 0.0, 0.5000000000000001,
+        //0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5000000000000001, 0.0,
+        //-0.5000000000000001, 0.0, 0.5000000000000001, 0.0, -0.5000000000000001,
+        //0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5000000000000001, 0.0,
+        //0.5000000000000001, 0.0, -0.5000000000000001, 0.0, -0.5000000000000001,
+        //0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5000000000000001, 0.0,
+        //-0.5000000000000001, 0.0, -0.5000000000000001, 0.0, 0.5000000000000001
+    //};
+    //C3_GATE(sim, sv_real, sv_imag, gm_real, gm_imag, g->qb0,g->qb1,g->qb2);
+    
     CCX_GATE(sim, sv_real, sv_imag, g->qb0, g->qb1, g->qb2); 
 }
 
