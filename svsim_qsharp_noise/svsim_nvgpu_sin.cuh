@@ -1736,6 +1736,8 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
     grid.sync();
 }
 
+/*
+
 #define DIV2E(x,y) ((x)>>(y))
 #define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
 #define EXP2E(x) ((IdxType)1<<(x))
@@ -1871,7 +1873,7 @@ __device__ __inline__ void C4_GATE(const Simulation* sim, ValType* sv_real, ValT
 }
 
 
-
+*/
 
 
 
