@@ -1,0 +1,87 @@
+namespace Quantum {
+    open Microsoft.Quantum.Intrinsic;
+    open Microsoft.Quantum.Canon;
+    open Microsoft.Quantum.Math;
+    open Microsoft.Quantum.Convert;
+
+    operation multiplier_Circuit() : (Int) {
+        mutable m_result = 0;
+        using(qubits = Qubit[15]) {
+            X(qubits[9]);
+            X(qubits[10]);
+            X(qubits[12]);
+            X(qubits[13]);
+            CCNOT(qubits[12], qubits[9], qubits[1]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CCNOT(qubits[12], qubits[10], qubits[4]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CCNOT(qubits[12], qubits[11], qubits[7]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CNOT(qubits[4], qubits[5]);
+            CNOT(qubits[7], qubits[8]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CNOT(qubits[6], qubits[8]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CNOT(qubits[4], qubits[5]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CNOT(qubits[4], qubits[5]);
+            CNOT(qubits[3], qubits[5]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CNOT(qubits[1], qubits[2]);
+            CNOT(qubits[0], qubits[2]);
+            CCNOT(qubits[12], qubits[9], qubits[1]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CCNOT(qubits[12], qubits[10], qubits[4]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[12], qubits[11], qubits[7]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CCNOT(qubits[13], qubits[9], qubits[4]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CCNOT(qubits[13], qubits[10], qubits[7]);
+            CNOT(qubits[4], qubits[5]);
+            CNOT(qubits[7], qubits[8]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CNOT(qubits[6], qubits[8]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CNOT(qubits[4], qubits[5]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CNOT(qubits[4], qubits[5]);
+            CNOT(qubits[3], qubits[5]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CCNOT(qubits[13], qubits[9], qubits[4]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CCNOT(qubits[13], qubits[10], qubits[7]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CNOT(qubits[4], qubits[5]);
+            CCNOT(qubits[14], qubits[9], qubits[7]);
+            CNOT(qubits[1], qubits[2]);
+            CNOT(qubits[7], qubits[8]);
+            CNOT(qubits[0], qubits[2]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CNOT(qubits[6], qubits[8]);
+            CCNOT(qubits[3], qubits[5], qubits[6]);
+            CCNOT(qubits[14], qubits[9], qubits[7]);
+            CNOT(qubits[4], qubits[5]);
+            CCNOT(qubits[4], qubits[5], qubits[6]);
+            CNOT(qubits[4], qubits[5]);
+            CNOT(qubits[3], qubits[5]);
+            CCNOT(qubits[0], qubits[2], qubits[3]);
+            CNOT(qubits[1], qubits[2]);
+            CCNOT(qubits[1], qubits[2], qubits[3]);
+            CNOT(qubits[1], qubits[2]);
+            CNOT(qubits[0], qubits[2]);
+            set m_result = SetBitValue(m_result, 0, ResultAsBool(M(qubits[2])));
+            set m_result = SetBitValue(m_result, 1, ResultAsBool(M(qubits[5])));
+            set m_result = SetBitValue(m_result, 2, ResultAsBool(M(qubits[8])));
+            ResetAll(qubits);
+        }
+        return (m_result);
+    }
+}
