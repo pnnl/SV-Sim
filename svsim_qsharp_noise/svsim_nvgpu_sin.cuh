@@ -1663,19 +1663,19 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
         const ValType e31_real, const ValType e31_imag,
         const ValType e32_real, const ValType e32_imag,
         const ValType e33_real, const ValType e33_imag,
-        const IdxType qubit1, const IdxType qubit2)
+        const IdxType qubit0, const IdxType qubit1)
 {
     grid_group grid = this_grid(); 
     const int tid = blockDim.x * blockIdx.x + threadIdx.x; 
-    const IdxType q0dim = (1 << max(qubit1, qubit2) );
-    const IdxType q1dim = (1 << min(qubit1, qubit2) );
-    assert (qubit1 != qubit2); //Non-cloning
+    const IdxType q0dim = (1 << max(qubit0, qubit1) );
+    const IdxType q1dim = (1 << min(qubit0, qubit1) );
+    assert (qubit0 != qubit1); //Non-cloning
 
-    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
-    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit0,qubit1)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit0,qubit1)+1);
     const IdxType inner_factor = q1dim;
+    const IdxType qubit0_dim = (1 << qubit0);
     const IdxType qubit1_dim = (1 << qubit1);
-    const IdxType qubit2_dim = (1 << qubit2);
 
     for (IdxType i = tid; i < outer_factor * mider_factor * inner_factor; 
             i+=blockDim.x*gridDim.x)
@@ -1684,8 +1684,8 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
         IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
         IdxType inner = i % inner_factor;
         IdxType pos0 = outer + mider + inner;
-        IdxType pos1 = outer + mider + inner + qubit2_dim;
-        IdxType pos2 = outer + mider + inner + qubit1_dim;
+        IdxType pos1 = outer + mider + inner + qubit1_dim;
+        IdxType pos2 = outer + mider + inner + qubit0_dim;
         IdxType pos3 = outer + mider + inner + q0dim + q1dim;
         
         const ValType el0_real = sv_real[pos0]; 
@@ -1735,6 +1735,148 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
     }
     grid.sync();
 }
+
+
+
+#define DIV2E(x,y) ((x)>>(y))
+#define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
+#define EXP2E(x) ((IdxType)1<<(x))
+#define SV8IDX(x) ((IdxType)1<<( ((x>>2)&1)*r + ((x>>1)&1)*q + ((x&1)*p) ))
+#define SV16IDX(x) ((IdxType)1<<( ((x>>3)&1)*s + ((x>>2)&1)*r + ((x>>1)&1)*q + ((x&1)*p) ))
+
+//============== Unified 3-qubit Gate ================
+//gm_real and gm_imag should be put in constant memory
+__device__ __inline__ void C3_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2)
+{
+    grid_group grid = this_grid(); 
+    const int tid = blockDim.x * blockIdx.x + threadIdx.x; 
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
+
+    //need to sort qubits: min->max: p, q, r
+    const IdxType p = min(min(qubit0, qubit1), qubit2);
+    const IdxType r = max(max(qubit0, qubit1), qubit2);
+    const IdxType q = qubit0 + qubit1 + qubit2 - p - r;
+
+    for (IdxType i = tid; i < ((sim->dim)>>3); i++)
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(r+1);
+        const IdxType term = term3 + term2 + term1 + term0;
+
+        register ValType el_real[8] = { 
+            sv_real[term+SV8IDX(0)], sv_real[term+SV8IDX(1)],
+            sv_real[term+SV8IDX(2)], sv_real[term+SV8IDX(3)],
+            sv_real[term+SV8IDX(4)], sv_real[term+SV8IDX(5)],
+            sv_real[term+SV8IDX(6)], sv_real[term+SV8IDX(7)]
+        };
+        register ValType el_imag[8] = { 
+            sv_imag[term+SV8IDX(0)], sv_imag[term+SV8IDX(1)],
+            sv_imag[term+SV8IDX(2)], sv_imag[term+SV8IDX(3)],
+            sv_imag[term+SV8IDX(4)], sv_imag[term+SV8IDX(5)],
+            sv_imag[term+SV8IDX(6)], sv_imag[term+SV8IDX(7)]
+        };
+        #pragma unroll
+        for (unsigned j=0; j<8; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<8; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*8+k]) - (el_imag[k] * gm_imag[j*8+k]);
+                res_imag += (el_real[k] * gm_imag[j*8+k]) + (el_imag[k] * gm_real[j*8+k]);
+            }
+            sv_real[term+SV8IDX(j)] = res_real;
+            sv_imag[term+SV8IDX(j)] = res_imag;
+        }
+    }
+    grid.sync();
+}
+
+//============== Unified 4-qubit Gate ================
+//gm_real and gm_imag should be put in constant memory
+__device__ __inline__ void C4_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2, const IdxType qubit3)
+{
+    grid_group grid = this_grid(); 
+    const int tid = blockDim.x * blockIdx.x + threadIdx.x; 
+
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit0 != qubit3); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
+    assert (qubit1 != qubit3); //Non-cloning
+    assert (qubit2 != qubit3); //Non-cloning
+
+    //need to sort qubits: min->max: p, q, r, s
+    const IdxType v0 = min(qubit0, qubit1);
+    const IdxType v1 = min(qubit2, qubit3);
+    const IdxType v2 = max(qubit0, qubit1);
+    const IdxType v3 = max(qubit2, qubit3);
+    const IdxType p = min(v0,v1); 
+    const IdxType q = min(min(v2,v3),max(v0,v1)); 
+    const IdxType r = max(min(v2,v3),max(v0,v1)); 
+    const IdxType s = max(v2,v3);
+
+    for (IdxType i = tid; i < ((sim->dim)>>4); i++)
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = MOD2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(r+1);
+        const IdxType term4 = DIV2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(s+1);
+        const IdxType term = term4 + term3 + term2 + term1 + term0;
+
+        register ValType el_real[16] = { 
+            sv_real[term+SV16IDX(0)],  sv_real[term+SV16IDX(1)],
+            sv_real[term+SV16IDX(2)],  sv_real[term+SV16IDX(3)],
+            sv_real[term+SV16IDX(4)],  sv_real[term+SV16IDX(5)],
+            sv_real[term+SV16IDX(6)],  sv_real[term+SV16IDX(7)],
+            sv_real[term+SV16IDX(8)],  sv_real[term+SV16IDX(9)],
+            sv_real[term+SV16IDX(10)], sv_real[term+SV16IDX(11)],
+            sv_real[term+SV16IDX(12)], sv_real[term+SV16IDX(13)],
+            sv_real[term+SV16IDX(14)], sv_real[term+SV16IDX(15)]
+        };
+        register ValType el_imag[16] = { 
+            sv_imag[term+SV16IDX(0)],  sv_imag[term+SV16IDX(1)],
+            sv_imag[term+SV16IDX(2)],  sv_imag[term+SV16IDX(3)],
+            sv_imag[term+SV16IDX(4)],  sv_imag[term+SV16IDX(5)],
+            sv_imag[term+SV16IDX(6)],  sv_imag[term+SV16IDX(7)],
+            sv_imag[term+SV16IDX(8)],  sv_imag[term+SV16IDX(9)],
+            sv_imag[term+SV16IDX(10)], sv_imag[term+SV16IDX(11)],
+            sv_imag[term+SV16IDX(12)], sv_imag[term+SV16IDX(13)],
+            sv_imag[term+SV16IDX(14)], sv_imag[term+SV16IDX(15)]
+        };
+        #pragma unroll
+        for (unsigned j=0; j<16; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<16; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*16+k]) - (el_imag[k] * gm_imag[j*16+k]);
+                res_imag += (el_real[k] * gm_imag[j*16+k]) + (el_imag[k] * gm_real[j*16+k]);
+            }
+            sv_real[term+SV16IDX(j)] = res_real;
+            sv_imag[term+SV16IDX(j)] = res_imag;
+        }
+    }
+    grid.sync();
+}
+
+
+
+
+
+
 
 
 //============== Measurement Gate ================
