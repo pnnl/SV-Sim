@@ -1741,8 +1741,8 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
 #define DIV2E(x,y) ((x)>>(y))
 #define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
 #define EXP2E(x) ((IdxType)1<<(x))
-#define SV8IDX(x) ( ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
-#define SV16IDX(x) ( ((x>>3)&1)*EXP2E(s) + ((x>>2)&1)*EXP2E(r) + ((x>>1)&1)*EXP2E(q) + ((x&1)*EXP2E(p)) )
+#define SV8IDX(x) ( ((x>>2)&1)*EXP2E(qubit0) + ((x>>1)&1)*EXP2E(qubit1) + ((x&1)*EXP2E(qubit2)) )
+#define SV16IDX(x) ( ((x>>3)&1)*EXP2E(qubit0) + ((x>>2)&1)*EXP2E(qubit1) + ((x>>1)&1)*EXP2E(qubit2) + ((x&1)*EXP2E(qubit3)) )
 
 //============== Unified 3-qubit Gate ================
 //gm_real and gm_imag should be put in constant memory
