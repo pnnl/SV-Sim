@@ -33,9 +33,6 @@
 //Accelerate by AVX512
 //#define USE_AVX512
 
-//If GPUDirect RDMA is supported (otherwise host memory buffer is used for MPI communication) 
-#define GPU_RDMA
-
 // ================================= Configurations =====================================
 namespace SVSim 
 {
