@@ -150,7 +150,7 @@ public:
     ~Circuit() { clear(); }
     void append(Gate& g)
     {
-        //printf("%s(theta:%lf,q:%lu,mask:%lu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
+        printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
         if (g.qubit >= n_qubits) 
         {
             printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
@@ -162,12 +162,12 @@ public:
     void AllocateQubit() 
     { 
         ++n_qubits; 
-        //printf("allocate 1 qubit, now in total: %lu\n",n_qubits);
+        printf("allocate 1 qubit, now in total: %llu\n",n_qubits);
     }
     void ReleaseQubit()
     {
         --n_qubits;
-        //printf("release 1 qubit, now in total: %lu\n", n_qubits);
+        printf("release 1 qubit, now in total: %llu\n", n_qubits);
     }
     void clear()
     {

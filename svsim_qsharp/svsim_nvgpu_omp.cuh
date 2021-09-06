@@ -1765,15 +1765,15 @@ __device__ __inline__ void SWAP_GATE(const Gate* g, const Simulation* sim, ValTy
         IdxType pos2_org = outer + mider + inner + qubit1_dim;
         IdxType pos3_org = outer + mider + inner + q0dim + q1dim;
 
-        IdxType pos0_gid = (pos0_org >> (sim->lg2_m_gpu));
-        IdxType pos1_gid = (pos1_org >> (sim->lg2_m_gpu));
-        IdxType pos2_gid = (pos2_org >> (sim->lg2_m_gpu));
-        IdxType pos3_gid = (pos3_org >> (sim->lg2_m_gpu));
+        IdxType pos0_gid = (pos0_org & (sim->n_gpus-1));
+        IdxType pos1_gid = (pos1_org & (sim->n_gpus-1));
+        IdxType pos2_gid = (pos2_org & (sim->n_gpus-1));
+        IdxType pos3_gid = (pos3_org & (sim->n_gpus-1));
 
-        IdxType pos0 = (pos0_org & (sim->m_gpu-1));
-        IdxType pos1 = (pos1_org & (sim->m_gpu-1));
-        IdxType pos2 = (pos2_org & (sim->m_gpu-1));
-        IdxType pos3 = (pos3_org & (sim->m_gpu-1));
+        IdxType pos0 = (pos0_org >> (sim->gpu_scale));
+        IdxType pos1 = (pos1_org >> (sim->gpu_scale));
+        IdxType pos2 = (pos2_org >> (sim->gpu_scale));
+        IdxType pos3 = (pos3_org >> (sim->gpu_scale));
 
         const ValType el0_real = sv_real[pos0_gid][pos0]; 
         const ValType el0_imag = sv_imag[pos0_gid][pos0];
