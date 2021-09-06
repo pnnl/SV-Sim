@@ -131,37 +131,40 @@ public:
     void ReleaseQubit(Qubit Q) override
     {
 
-        printf("\n======First Release========\n");
-        sim->print_res_sv();
-        printf("\n==============\n");
+        //printf("\n======First Release========\n");
+        //sim->print_res_sv();
+        //printf("\n==============\n");
         //The first time a release is encoutered, we need to check if the simulation 
         //should be run until here, otherwise, ancilla qubit may disappear
         if (sim->get_n_gates() != 0)
             sim->sim();
+        
 
-        printf("\n======Second Release========\n");
-        sim->print_res_sv();
-        printf("\n==============\n");
+        //printf("\n======Second Release========\n");
+        //sim->print_res_sv();
+        //printf("\n==============\n");
 
         IdxType this_logical_qubit = to_qubit(Q);
         IdxType this_physical_qubit = logical_qubits[this_logical_qubit];
         IdxType target_physical_qubit = n_qubits-1;
 
-#ifdef USE_NVGPU
-        IdxType gpu_scale = floor(log((double)N_PE+0.5)/log(2.0));
-        if (n_qubits-1>=gpu_scale)
-            target_physical_qubit -= gpu_scale;
-#endif
+        //#ifdef USE_NVGPU
+        //IdxType gpu_scale = floor(log((double)N_PE+0.5)/log(2.0));
+        //if (n_qubits-1>=gpu_scale)
+        //target_physical_qubit -= gpu_scale;
+        //#endif
+        //
         IdxType target_logical_qubit = physical_qubits[target_physical_qubit];
         
-        printf("Release qubit %lu at slot %lu.\n", this_logical_qubit, this_physical_qubit);
+        //printf("To release qubit %llu at slot %llu, switch to %llu at slot %llu\n", 
+        //this_logical_qubit, this_physical_qubit, target_logical_qubit, target_physical_qubit);
         
         //if not the last physical qubit
         //then swap to the last physical slot
         if (this_physical_qubit != target_physical_qubit) 
         {
 
-            printf("This is to switch physical qubit:%llu and %llu\n",this_physical_qubit, target_physical_qubit);
+            //printf("This is to switch physical qubit:%llu and %llu\n",this_physical_qubit, target_physical_qubit);
             sim->Swap(this_physical_qubit, target_physical_qubit);
             sim->sim();
 
@@ -170,9 +173,9 @@ public:
             logical_qubits[target_logical_qubit] = this_physical_qubit;
             physical_qubits[this_physical_qubit] = target_logical_qubit;
             
-            printf("\n======After Swap========\n");
-            sim->print_res_sv();
-            printf("\n==============\n");
+            //printf("\n======After Swap========\n");
+            //sim->print_res_sv();
+            //printf("\n==============\n");
 
 
         }
@@ -189,6 +192,7 @@ public:
         //printf("Physical:\n");
         //for (int i=0; i<N_QUBIT_SLOT; i++) printf(" %llu", physical_qubits[i]);
 
+        /*
 #ifdef USE_NVGPU
         if ((gpu_scale != 0) && (n_qubits-1>=gpu_scale))
         {
@@ -212,11 +216,28 @@ public:
         //printf("\n");
         //printf("Physical:\n");
         //for (IdxType i=0; i<N_QUBIT_SLOT; i++) printf(" %llu", physical_qubits[i]);
+        */
+
+        //#ifdef USE_NVGPU
+        //IdxType gpu_scale = floor(log((double)N_PE+0.5)/log(2.0));
+        //if (n_qubits>gpu_scale) sim->ReleaseQubit();
+        //#else
+        //#endif
+        //
+        //printf("\n======Before Reduce qubit========\n");
+        //sim->print_res_sv();
+        //printf("\n==============\n");
+
 
         sim->ReleaseQubit();//always release the last
         --n_qubits;
 
-         if (n_qubits == 0) sim->reset();
+        //if (n_qubits>0) sim->sim();
+        //printf("\n======After Reduce qubit========\n");
+        //sim->print_res_sv();
+        //printf("\n==============\n");
+
+        if (n_qubits == 0) sim->reset();
     }
     void ReleaseResult(Result result) override {} 
 
@@ -506,8 +527,9 @@ public:
         ValType rand = (ValType)std::rand()/(ValType)RAND_MAX;
         IdxType pauli = 0; //PauliId_Z
 
-
-
+        //printf("\n======Before Measurement========\n");
+        //sim->print_res_sv();
+        //printf("\n==============\n");
 
         switch (bases[0]) 
         {
@@ -519,14 +541,14 @@ public:
         sim->Measure(target, rand, pauli);
         ValType prob_of_one = sim->sim();
 
-        //printf("\n======After========\n");
+        //printf("\n======After Measurement========\n");
         //sim->print_res_sv();
         //printf("\n==============\n");
         //printf("---Res:%d-----\n",rand<prob_of_one?1:0);
         //
         
-        IdxType logc = to_qubit(targets[0]);
-        printf("\n@@@ Measure logic qubit:%llu at slot: %llu, got: %d\n",logc, target, rand<prob_of_one?1:0);
+        //IdxType logc = to_qubit(targets[0]);
+        //printf("\n@@@ Measure logic qubit:%llu at slot: %llu, got: %d\n",logc, target, rand<prob_of_one?1:0);
 
 
         return (rand<prob_of_one) ? UseOne() : UseZero();

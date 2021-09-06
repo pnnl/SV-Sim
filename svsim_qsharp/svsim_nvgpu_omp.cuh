@@ -151,7 +151,7 @@ public:
     ~Circuit() { clear(); }
     void append(Gate& g)
     {
-        printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
+        //printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
         if (g.qubit >= n_qubits) 
         {
             printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
@@ -163,12 +163,12 @@ public:
     void AllocateQubit() 
     { 
         ++n_qubits; 
-        printf("allocate 1 qubit, now in total: %llu\n",n_qubits);
+        //printf("allocate 1 qubit, now in total: %llu\n",n_qubits);
     }
     void ReleaseQubit()
     {
         --n_qubits;
-        printf("release 1 qubit, now in total: %llu\n", n_qubits);
+        //printf("release 1 qubit, now in total: %llu\n", n_qubits);
     }
     void clear()
     {
@@ -210,7 +210,7 @@ class Simulation
 {
 public:
     Simulation(IdxType _n_gpus=N_PE, IdxType _n_qubits=N_QUBIT_SLOT) : 
-        n_qubits(_n_qubits), n_gpus(_n_gpus),
+        n_qubits(_n_qubits), n_gpus_org(_n_gpus), n_gpus(_n_gpus),
         dim((IdxType)1<<(n_qubits)), 
         half_dim((IdxType)1<<(n_qubits-1)),
         sv_size(dim*(IdxType)sizeof(ValType)),
@@ -236,6 +236,9 @@ public:
             std::cerr << "Error: Number of GPUs is too large or too small." << std::endl;
             exit(1);
         }
+        //printf("n_qubits:%llu\n",n_qubits);
+        //printf("sv_size:%llu\n",sv_size);
+
         //CPU side initialization
         SAFE_ALOC_HOST(sv_real_cpu, sv_size);
         SAFE_ALOC_HOST(sv_imag_cpu, sv_size);
@@ -720,7 +723,9 @@ public:
         memset(sv_imag_cpu, 0, sv_size);
         //State Vector initial state [0..0] = 1
         sv_real_cpu[0] = 1.;
-        
+        //Reset GPU number
+        n_gpus = n_gpus_org;
+        gpu_scale = floor(log((double)n_gpus_org+0.5)/log(2.0));
         //GPU side initialization
         for (unsigned d=0; d<n_gpus; d++)
         {
@@ -752,13 +757,18 @@ public:
         assert(_n_qubits < N_QUBIT_SLOT);
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(_n_qubits));
-        this->half_dim = (IdxType)1UL<<(_n_qubits-1UL);
+        this->dim = ((IdxType)1<<(_n_qubits));
+        this->half_dim = (IdxType)1<<(_n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
+        if (n_qubits < gpu_scale) 
+        {
+            gpu_scale = n_qubits;
+            n_gpus = ((IdxType)1<<gpu_scale);
+        }
         this->lg2_m_gpu = _n_qubits - gpu_scale;
         this->m_gpu = (IdxType)1<<(lg2_m_gpu);
         this->sv_size_per_gpu = sv_size/n_gpus;
-        printf("!!! update: dim:%llu n_gpus:%llu, lg2_m_gpu:%llu, m_gpu:%llu\n",dim,n_gpus, lg2_m_gpu, m_gpu);
+        //printf("!!! update: dim:%llu n_gpus:%llu, lg2_m_gpu:%llu, m_gpu:%llu\n",dim,n_gpus, lg2_m_gpu, m_gpu);
         if (dim % n_gpus != 0)
         {
             std::cerr << "Error: Number of GPUs is too large or too small." << std::endl;
@@ -844,7 +854,7 @@ public:
                 //Copy back
                 cudaSafeCall(cudaMemcpy(&res_prob, m_real[d], sizeof(ValType), cudaMemcpyDeviceToHost));
 
-                printf("$$$$$$$$$$ res_prob:%lf $$$$$$$$\n",res_prob);
+                //printf("$$$$$$$$$$ res_prob:%lf $$$$$$$$\n",res_prob);
                 cudaSafeCall(cudaDeviceSynchronize());
             }
             reset_circuit(d);
@@ -942,7 +952,8 @@ public:
     IdxType n_qubits;
     // gpu_scale is 2^x of the number of GPUs, e.g., with 8 GPUs the gpu_scale is 3 (2^3=8)
     IdxType gpu_scale;
-    IdxType n_gpus;
+    IdxType n_gpus_org; //originally how many gpus
+    IdxType n_gpus; //currently how many gpus used
     IdxType lg2_m_gpu;
     IdxType m_gpu;
     IdxType dim;
@@ -981,18 +992,47 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
 
 //================================= Gate Definition ========================================
 //Define MG-BSP machine operation header (Optimized version)
+//#define OP_HEAD multi_grid_group grid = this_multi_grid(); \
+        //for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
+                //i+=grid.size()){ \
+            //IdxType outer = (i >> qubit); \
+            //IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            //IdxType offset = (outer << (qubit+1)); \
+            //IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
+            //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+            //IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
+            //IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
+
 #define OP_HEAD multi_grid_group grid = this_multi_grid(); \
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
             IdxType outer = (i >> qubit); \
             IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
             IdxType offset = (outer << (qubit+1)); \
-            IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
-            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos0_gid = ((offset + inner)&(sim->n_gpus-1));\
+            IdxType pos0 = ((offset + inner)>>(sim->gpu_scale)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit))&(sim->n_gpus-1)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit))>>(sim->gpu_scale));  
+
+            //Be really really careful here: to accomodate dynamic qubit allocation and release (at position n_qubit-1), 
+            //the LSB (right-side) endian is used for mapping to gpus, the MSB (left-side) endian is used for mapping to
+            //particular regions in a single GPU.
+
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
+//#define OP_HEAD_MASK multi_grid_group grid = this_multi_grid(); \
+        //for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
+                //i+=grid.size()){ \
+            //IdxType outer = (i >> qubit); \
+            //IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            //IdxType offset = (outer << (qubit+1)); \
+            //IdxType pos0_src = offset + inner; \
+            //if (((~(pos0_src&mask))&mask) != 0) continue; \
+            //IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
+            //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+            //IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
+            //IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
+
 #define OP_HEAD_MASK multi_grid_group grid = this_multi_grid(); \
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
@@ -1001,10 +1041,10 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
             IdxType offset = (outer << (qubit+1)); \
             IdxType pos0_src = offset + inner; \
             if (((~(pos0_src&mask))&mask) != 0) continue; \
-            IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
-            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
+            IdxType pos0_gid = ((offset + inner)&(sim->n_gpus-1));\
+            IdxType pos0 = ((offset + inner)>>(sim->gpu_scale)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit))&(sim->n_gpus-1)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit))>>(sim->gpu_scale));  
 
 //Define MG-BSP machine operation footer
 #define OP_TAIL  } grid.sync(); 
@@ -1816,7 +1856,9 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     IdxType pauli = g->mask;
     const int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1)])
+    //#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1)])
+
+#define PGAS(arr,i) (arr[(i)&(sim->n_gpus-1)][(i)>>(sim->gpu_scale)])
 
     ValType** m_real = sim->m_real;
 
@@ -1857,7 +1899,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
 
     ValType prob_of_one = m_real[0][0];
     grid.sync();
-    if (tid ==0 ) printf("m_real[%d] is:%lf for qubit:%llu with mask:%llu \n",tid,prob_of_one, qubit, mask);
+    //if (tid ==0 ) printf("m_real[%d] is:%lf for qubit:%llu with mask:%llu \n",tid,prob_of_one, qubit, mask);
 
     //Now m_real[0] should have the probability of being 1
     bool val = (rand < prob_of_one);
