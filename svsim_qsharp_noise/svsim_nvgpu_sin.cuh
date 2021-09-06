@@ -31,6 +31,8 @@
 //#include "noise_gate_BCSZ_0.98.cuh"
 //#include "noise_gate_BCSZ_0.99.cuh"
 
+#include "noise_gate_BCSZ_1_array.cuh"
+
 #include "config.hpp"
 
 namespace SVSim
@@ -57,6 +59,7 @@ enum OP  //32 gates + measure
     ControlledEY, ControlledEZ, //2
     AdjointS, AdjointT, //2
     ControlledAdjointS, ControlledAdjointT, //2
+    Swap, //1
     Measure //1
 };
 
@@ -72,7 +75,7 @@ const char *OP_NAMES[] = {
     "ControlledEY", "ControlledEZ", 
     "AdjointS", "AdjointT", 
     "ControlledAdjointS", "ControlledAdjointT", 
-    "Measure"
+    "Swap", "Measure"
 };
 
 //Define gate function pointers
@@ -108,6 +111,7 @@ extern __device__ func_t pAdjointS;
 extern __device__ func_t pAdjointT;
 extern __device__ func_t pControlledAdjointS;
 extern __device__ func_t pControlledAdjointT;
+extern __device__ func_t pSwap;
 extern __device__ func_t pMeasure;
 
    
@@ -159,7 +163,7 @@ public:
         //printf("%s(theta:%lf,q:%lu,mask:%lu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
         if (g.qubit >= n_qubits) 
         {
-            printf("%s(theta:%lf,q:%lu,mask:%lu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
+            printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
             throw std::logic_error("Gate uses qubit out of range!");
         }
         circuit.push_back(g);
@@ -267,8 +271,9 @@ public:
         circuit_handle->AllocateQubit();
         //printf("allocate 1 qubit, now in total: %lu\n",circuit_handle->n_qubits);
     }
-    void ReleaseQubit(IdxType qubit)
+    void ReleaseQubit()
     {
+        //circuit_handle->ReleaseQubit();
         //printf("release 1 qubit at %lu, now in total: %lu\n", qubit, circuit_handle->n_qubits);
     }
     void launchGatePointers()
@@ -305,6 +310,7 @@ public:
         cudaSafeCall(cudaMemcpyFromSymbol(&gAdjointT, pAdjointT, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointS, pControlledAdjointS, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointT, pControlledAdjointT, sizeof(func_t))); 
+        cudaSafeCall(cudaMemcpyFromSymbol(&gSwap, pSwap, sizeof(func_t))); 
         cudaSafeCall(cudaMemcpyFromSymbol(&gMeasure, pMeasure, sizeof(func_t))); 
     }
 
@@ -471,6 +477,11 @@ public:
         Gate* G = new Gate(OP::ControlledAdjointT,gControlledAdjointT,qubit,0,mask);
         circuit_handle->append(*G);
     }
+    void Swap(IdxType qubit0, IdxType qubit1)
+    {
+        Gate* G = new Gate(OP::Swap,gSwap,qubit0,0,qubit1);
+        circuit_handle->append(*G);
+    }
     void Measure(IdxType qubit, ValType rand, IdxType pauli)
     {
         Gate* G = new Gate(OP::Measure,gMeasure,qubit,rand,pauli);
@@ -498,6 +509,14 @@ public:
     void reset_circuit()
     {
         circuit_handle->clear();
+    }
+    IdxType get_n_qubits()
+    {
+        return circuit_handle->n_qubits;
+    }
+    IdxType get_n_gates()
+    {
+        return circuit_handle->n_gates;
     }
     void update(const IdxType _n_qubits, const IdxType _n_gates)
     {
@@ -555,7 +574,7 @@ public:
 
 #ifdef PRINT_MEA_PER_CIRCUIT
         printf("\n============== SVsim ===============\n");
-        printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
+        printf("nqubits:%llu, ngates:%llu, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
                 n_qubits, n_gates, 1, sim_time, 0., 
                 sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024, res_prob);
         printf("=====================================\n");
@@ -598,7 +617,7 @@ public:
     {
         cudaSafeCall(cudaMemcpy(sv_real_cpu, sv_real, sv_size, cudaMemcpyDeviceToHost));
         cudaSafeCall(cudaMemcpy(sv_imag_cpu, sv_imag, sv_size, cudaMemcpyDeviceToHost));
-        printf("----- Real SV (dim:%lu) ------\n", dim);
+        printf("----- Real SV (dim:%llu) ------\n", dim);
         for (IdxType i=0; i<dim; i++) 
             printf("%lf ", sv_real_cpu[i]);
         printf("\n");
@@ -615,7 +634,8 @@ public:
     func_t gControlledRI, gControlledRX, gControlledRY, gControlledRZ;
     func_t gControlledEI, gControlledEX, gControlledEY, gControlledEZ;
     func_t gAdjointS, gAdjointT, gControlledAdjointS, gControlledAdjointT;
-    func_t gMeasure;
+    func_t gSwap, gMeasure;
+
 
 public:
     // n_qubits is the number of qubits
@@ -1620,6 +1640,64 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Simulation* sim, ValTyp
     OP_TAIL;
 }
 
+
+//============== Swap Gate ================
+//Swap the position of two qubits
+// [1,0,0,0]
+// [0,0,1,0]
+// [0,1,0,0]
+// [0,0,0,1]
+//This is for qubit refinement when release or rearrange
+__device__ __inline__ void SWAP_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, const IdxType qubit1, const IdxType qubit2)
+{
+    assert (qubit1 != qubit2); //Non-cloning
+    grid_group grid = this_grid(); 
+    const int tid = blockDim.x * blockIdx.x + threadIdx.x; 
+    const IdxType q0dim = ((IdxType)1 << max(qubit1, qubit2) );
+    const IdxType q1dim = ((IdxType)1 << min(qubit1, qubit2) );
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType inner_factor = q1dim;
+    const IdxType qubit1_dim = ((IdxType)1 << qubit1);
+    const IdxType qubit2_dim = ((IdxType)1 << qubit2);
+
+    for (IdxType i = tid; i < outer_factor * mider_factor * inner_factor; 
+            i+=blockDim.x*gridDim.x)
+    {
+        IdxType outer = ((i/inner_factor) / (mider_factor)) * (q0dim+q0dim);
+        IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
+        IdxType inner = i % inner_factor;
+        IdxType pos0 = outer + mider + inner; //qubit-1
+        IdxType pos1 = outer + mider + inner + qubit2_dim; //qubit-1
+        IdxType pos2 = outer + mider + inner + qubit1_dim; //qubit-2
+        IdxType pos3 = outer + mider + inner + q0dim + q1dim; //qubit-2
+        
+        const ValType el0_real = sv_real[pos0]; 
+        const ValType el0_imag = sv_imag[pos0];
+        const ValType el1_real = sv_real[pos1]; 
+        const ValType el1_imag = sv_imag[pos1];
+        const ValType el2_real = sv_real[pos2]; 
+        const ValType el2_imag = sv_imag[pos2];
+        const ValType el3_real = sv_real[pos3]; 
+        const ValType el3_imag = sv_imag[pos3];
+
+        //Real part
+        sv_real[pos0] = el0_real;
+        sv_real[pos1] = el2_real; 
+        sv_real[pos2] = el1_real;
+        sv_real[pos3] = el3_real;
+        //Imag part
+        sv_imag[pos0] = el0_imag;
+        sv_imag[pos1] = el2_imag; 
+        sv_imag[pos2] = el1_imag;
+        sv_imag[pos3] = el3_imag;
+    }
+    grid.sync();
+}
+
+
+
+
 //============== Unified 1-qubit Gate ================
 __device__ __inline__ void C1_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag, 
         const ValType e0_real, const ValType e0_imag,
@@ -1736,7 +1814,6 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType* sv_real, ValT
     grid.sync();
 }
 
-/*
 
 #define DIV2E(x,y) ((x)>>(y))
 #define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
@@ -1871,13 +1948,6 @@ __device__ __inline__ void C4_GATE(const Simulation* sim, ValType* sv_real, ValT
     }
     grid.sync();
 }
-
-
-*/
-
-
-
-
 
 //============== Measurement Gate ================
 /** Pr(Zero||\psi>) = 1/2 <\psi| |(1+P0 \tp P1 \tp ... \tp P(N-1) )| |\psi>
@@ -2131,6 +2201,19 @@ __device__ void ControlledX_OP(const Gate* g, const Simulation* sim, ValType* sv
 {
     ControlledX_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
     ControlledX_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+
+    /*
+    if (__popcll(g->mask) == 1)
+    {
+        IdxType control = __ffsll(g->mask)-1;
+        C4_GATE(sim, sv_real, sv_imag, CX_real, CX_imag, control, g->qubit, control+(sim->n_qubits), (g->qubit)+(sim->n_qubits));
+    }
+    else
+    {
+        ControlledX_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+        ControlledX_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+    }
+    */
     
 }
 
@@ -2144,6 +2227,20 @@ __device__ void ControlledZ_OP(const Gate* g, const Simulation* sim, ValType* sv
 {
     ControlledZ_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
     ControlledZ_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+
+    /*
+    if (__popcll(g->mask) == 1)
+    {
+        IdxType control = __ffsll(g->mask)-1;
+        C4_GATE(sim, sv_real, sv_imag, CZ_real, CZ_imag, control, g->qubit, control+(sim->n_qubits), (g->qubit)+(sim->n_qubits));
+    }
+    else
+    {
+        ControlledZ_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+        ControlledZ_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+    }
+    */
+
 }
 
 __device__ void ControlledH_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
@@ -2236,6 +2333,12 @@ __device__ void ControlledAdjointT_OP(const Gate* g, const Simulation* sim, ValT
 } 
 
 
+__device__ void SWAP_OP(const Gate* g, const Simulation* sim, ValType* sv_real, ValType* sv_imag)
+{
+    SWAP_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    SWAP_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)+(sim->n_qubits));
+} 
+
 
 
 
@@ -2286,6 +2389,7 @@ __device__ func_t pControlledEZ = ControlledEZ_OP;
 
 __device__ func_t pControlledAdjointS = ControlledAdjointS_OP;
 __device__ func_t pControlledAdjointT = ControlledAdjointT_OP;
+__device__ func_t pSwap = SWAP_OP;
 
 
 

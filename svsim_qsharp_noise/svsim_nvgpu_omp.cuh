@@ -31,6 +31,8 @@
 //#include "noise_gate_BCSZ_0.98.cuh"
 //#include "noise_gate_BCSZ_0.99.cuh"
 
+#include "noise_gate_BCSZ_1_array.cuh"
+
 #include "config.hpp"
 
 namespace SVSim
@@ -57,6 +59,7 @@ enum OP  //32 gates + measure
     ControlledEY, ControlledEZ, //2
     AdjointS, AdjointT, //2
     ControlledAdjointS, ControlledAdjointT, //2
+    Swap, //1
     Measure //1
 };
 
@@ -72,7 +75,7 @@ const char *OP_NAMES[] = {
     "ControlledEY", "ControlledEZ", 
     "AdjointS", "AdjointT", 
     "ControlledAdjointS", "ControlledAdjointT", 
-    "Measure"
+    "Swap", "Measure"
 };
 
 //Define gate function pointers
@@ -108,6 +111,7 @@ extern __device__ func_t pAdjointS;
 extern __device__ func_t pAdjointT;
 extern __device__ func_t pControlledAdjointS;
 extern __device__ func_t pControlledAdjointT;
+extern __device__ func_t pSwap;
 extern __device__ func_t pMeasure;
 
    
@@ -156,7 +160,7 @@ public:
     ~Circuit() { clear(); }
     void append(Gate& g)
     {
-        //printf("%s(theta:%lf,q:%lu,mask:%lu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
+        //printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
         if (g.qubit >= n_qubits) 
         {
             printf("%s(theta:%lf,q:%llu,mask:%llu)\n",OP_NAMES[g.op_name], g.theta, g.qubit, g.mask);
@@ -214,8 +218,8 @@ public:
 class Simulation
 {
 public:
-    Simulation(IdxType _n_gpus, IdxType _n_qubits=N_QUBIT_SLOT) : 
-        n_qubits(_n_qubits), n_gpus(_n_gpus),
+    Simulation(IdxType _n_gpus=N_PE, IdxType _n_qubits=N_QUBIT_SLOT) : 
+        n_qubits(_n_qubits), n_gpus_org(_n_gpus), n_gpus(_n_gpus),
         dim((IdxType)1<<(n_qubits)), 
         half_dim((IdxType)1<<(n_qubits-1)),
         sv_size(dim*(IdxType)sizeof(ValType)),
@@ -313,6 +317,7 @@ public:
         SAFE_ALOC_HOST(gAdjointT, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gControlledAdjointS, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gControlledAdjointT, sizeof(func_t)*n_gpus);
+        SAFE_ALOC_HOST(gSwap, sizeof(func_t)*n_gpus);
         SAFE_ALOC_HOST(gMeasure, sizeof(func_t)*n_gpus);
         SetupGatePointers();
 
@@ -378,6 +383,7 @@ public:
         SAFE_FREE_HOST(gAdjointT);
         SAFE_FREE_HOST(gControlledAdjointS);
         SAFE_FREE_HOST(gControlledAdjointT);
+        SAFE_FREE_HOST(gSwap);
         SAFE_FREE_HOST(gMeasure);
     }
     void AllocateQubit()
@@ -388,9 +394,13 @@ public:
             circuit_handle[d]->AllocateQubit();
         }
     }
-    void ReleaseQubit(IdxType qubit)
+    void ReleaseQubit()
     {
         //printf("release 1 qubit at: %lu\n", qubit);
+        //for (unsigned d=0; d<n_gpus; d++)
+        //{
+        //circuit_handle[d]->ReleaseQubit();
+        //}
     }
     void SetupGatePointers()
     {
@@ -429,6 +439,7 @@ public:
             cudaSafeCall(cudaMemcpyFromSymbol(&gAdjointT[d], pAdjointT, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointS[d], pControlledAdjointS, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gControlledAdjointT[d], pControlledAdjointT, sizeof(func_t))); 
+            cudaSafeCall(cudaMemcpyFromSymbol(&gSwap[d], pSwap, sizeof(func_t))); 
             cudaSafeCall(cudaMemcpyFromSymbol(&gMeasure[d], pMeasure, sizeof(func_t))); 
         }
     }
@@ -692,6 +703,14 @@ public:
             circuit_handle[d]->append(*G);
         }
     }
+    void Swap(IdxType qubit0, IdxType qubit1)
+    {
+        for (unsigned d=0; d<n_gpus; d++)
+        {
+            Gate* G = new Gate(OP::Swap,gSwap[d],qubit0,0,qubit1);
+            circuit_handle[d]->append(*G);
+        }
+    }
     void Measure(IdxType qubit, ValType rand, IdxType pauli)
     {
         for (unsigned d=0; d<n_gpus; d++)
@@ -705,7 +724,6 @@ public:
     void reset()
     {
         //printf("%lu qubits are to be released in reset\n", circuit_handle->n_qubits);
-
         for (unsigned d=0; d<n_gpus; d++)
         {
             IdxType qubits_to_release = circuit_handle[d]->n_qubits;
@@ -717,6 +735,10 @@ public:
         memset(sv_imag_cpu, 0, sv_size);
         //State Vector initial state [0..0] = 1
         sv_real_cpu[0] = 1.;
+
+        //Reset GPU number
+        n_gpus = n_gpus_org;
+        gpu_scale = floor(log((double)n_gpus_org+0.5)/log(2.0));
         
         //GPU side initialization
         for (unsigned d=0; d<n_gpus; d++)
@@ -734,18 +756,38 @@ public:
         circuit_handle[i_gpu]->clear();
         //printf("Circuit is reset!\n");
     }
+    IdxType get_n_qubits()
+    {
+        //by default we return value at GPU-0
+        return circuit_handle[0]->n_qubits;
+    }
+    IdxType get_n_gates()
+    {
+        //by default we return value at GPU-0
+        return circuit_handle[0]->n_gates;
+    }
     void update(const IdxType _n_qubits, const IdxType _n_gates)
     {
         assert(_n_qubits <= (N_QUBIT_SLOT/2));
         //For density matrix, we need double the qubits
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(2*n_qubits));
-        this->half_dim = (IdxType)1UL<<(2*n_qubits-1UL);
+        this->dim = ((IdxType)1<<(2*n_qubits));
+        this->half_dim = (IdxType)1<<(2*n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
+        if (n_qubits < gpu_scale) 
+        {
+            gpu_scale = n_qubits;
+            n_gpus = ((IdxType)1<<gpu_scale);
+        }
         this->lg2_m_gpu = 2*n_qubits - gpu_scale;
-        this->m_gpu = (IdxType)1UL<<(lg2_m_gpu);
+        this->m_gpu = (IdxType)1<<(lg2_m_gpu);
         this->sv_size_per_gpu = sv_size/n_gpus;
+        if (((IdxType)1<<(n_qubits)) % n_gpus != 0)
+        {
+            std::cerr << "Error: Number of GPUs is too large or too small." << std::endl;
+            exit(1);
+        }
     }
     std::string circuitToString()
     {
@@ -840,8 +882,8 @@ public:
 
 #ifdef PRINT_MEA_PER_CIRCUIT
         printf("\n============== SVsim ===============\n");
-        printf("nqubits:%d, ngates:%d, ngpus:%d, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
-                n_qubits, n_gates, 1, avg_sim_time, 0., 
+        printf("nqubits:%llu, ngates:%llu, ngpus:%llu, comp:%.3lf ms, comm:%.3lf ms, sim:%.3lf ms, mem:%.3lf MB, mem_per_gpu:%.3lf MB, prob: %.3f\n",
+                n_qubits, n_gates, n_gpus, avg_sim_time, 0., 
                 avg_sim_time, gpu_mem/1024/1024, gpu_mem/1024/1024, res_prob);
         printf("=====================================\n");
 #endif
@@ -869,7 +911,7 @@ public:
         }
         //accumulate for sampling
         ValType* sv_scan = NULL;
-        IdxType sv_num = (1UL<<n_qubits);
+        IdxType sv_num = ((IdxType)1<<n_qubits);
         SAFE_ALOC_HOST(sv_scan, (sv_num+1)*sizeof(ValType));
         sv_scan[0] = 0;
         for (IdxType i=1; i<sv_num+1; i++)
@@ -917,13 +959,14 @@ public:
     func_t *gControlledRI, *gControlledRX, *gControlledRY, *gControlledRZ;
     func_t *gControlledEI, *gControlledEX, *gControlledEY, *gControlledEZ;
     func_t *gAdjointS, *gAdjointT, *gControlledAdjointS, *gControlledAdjointT;
-    func_t *gMeasure;
+    func_t *gSwap, *gMeasure;
 
 public:
     // n_qubits is the number of qubits
     IdxType n_qubits;
     // gpu_scale is 2^x of the number of GPUs, e.g., with 8 GPUs the gpu_scale is 3 (2^3=8)
     IdxType gpu_scale;
+    IdxType n_gpus_org; //originally how many gpus
     IdxType n_gpus;
     IdxType lg2_m_gpu;
     IdxType m_gpu;
@@ -967,26 +1010,27 @@ __global__ void simulation_kernel(Simulation* sim, unsigned i_gpu)
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
-            IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-            IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1UL));  
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
+            IdxType pos0_gid = ((offset + inner)&(sim->n_gpus-1));\
+            IdxType pos0 = ((offset + inner)>>(sim->gpu_scale)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit))&(sim->n_gpus-1)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit))>>(sim->gpu_scale));  
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
 #define OP_HEAD_MASK multi_grid_group grid = this_multi_grid(); \
         for (IdxType i=grid.thread_rank(); i<(sim->half_dim);\
                 i+=grid.size()){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
             IdxType pos0_src = offset + inner; \
             if (((~(pos0_src&mask))&mask) != 0) continue; \
-            IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-            IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-            IdxType pos1_gid = ((offset + inner + (1UL<<qubit)) >> (sim->lg2_m_gpu)); \
-            IdxType pos1 = ((offset + inner + (1UL<<qubit)) & (sim->m_gpu-1UL));  
+            IdxType pos0_gid = ((offset + inner)&(sim->n_gpus-1));\
+            IdxType pos0 = ((offset + inner)>>(sim->gpu_scale)); \
+            IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit))&(sim->n_gpus-1)); \
+            IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit))>>(sim->gpu_scale));  
+
 
 //Define MG-BSP machine operation footer
 #define OP_TAIL  } grid.sync(); 
@@ -1144,10 +1188,10 @@ __device__ __inline__ void ConjugateRI_GATE(const Simulation* sim, ValType** sv_
     ValType ri_real = cos(theta/2.0);
     ValType ri_imag = sin(theta/2.0);
     OP_HEAD;
-    const ValType el0_real = sv_real[pos0]; 
-    const ValType el0_imag = sv_imag[pos0];
-    const ValType el1_real = sv_real[pos1]; 
-    const ValType el1_imag = sv_imag[pos1];
+    const ValType el0_real = sv_real[pos0_gid][pos0]; 
+    const ValType el0_imag = sv_imag[pos0_gid][pos0];
+    const ValType el1_real = sv_real[pos1_gid][pos1]; 
+    const ValType el1_imag = sv_imag[pos1_gid][pos1];
     sv_real[pos0_gid][pos0] = (el0_real * ri_real) - (el0_imag * ri_imag);
     sv_imag[pos0_gid][pos0] = (el0_real * ri_imag) + (el0_imag * ri_real);
     sv_real[pos1_gid][pos1] = (el1_real * ri_real) - (el1_imag * ri_imag);
@@ -1927,6 +1971,72 @@ __device__ __inline__ void ControlledAdjointT_GATE(const Simulation* sim, ValTyp
     OP_TAIL;
 }
 
+//============== Swap Gate ================
+//Swap the position of two qubits
+// [1,0,0,0]
+// [0,0,1,0]
+// [0,1,0,0]
+// [0,0,0,1]
+//This is for qubit refinement when release or rearrange
+__device__ __inline__ void SWAP_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, const IdxType qubit, const IdxType mask)
+{
+    const IdxType qubit1 = qubit;
+    const IdxType qubit2 = mask;
+    assert (qubit1 != qubit2); //Non-cloning
+    multi_grid_group grid = this_multi_grid(); 
+    const IdxType q0dim = ((IdxType)1 << max(qubit1, qubit2) );
+    const IdxType q1dim = ((IdxType)1 << min(qubit1, qubit2) );
+    const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
+    const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
+    const IdxType inner_factor = q1dim;
+    const IdxType qubit1_dim = ((IdxType)1 << qubit1);
+    const IdxType qubit2_dim = ((IdxType)1 << qubit2);
+
+    for (IdxType i = grid.thread_rank(); i < outer_factor * mider_factor * inner_factor; 
+            i+=grid.size())
+    {
+        IdxType outer = ((i/inner_factor) / (mider_factor)) * (q0dim+q0dim);
+        IdxType mider = ((i/inner_factor) % (mider_factor)) * (q1dim+q1dim);
+        IdxType inner = i % inner_factor;
+        IdxType pos0_org = outer + mider + inner;
+        IdxType pos1_org = outer + mider + inner + qubit2_dim;
+        IdxType pos2_org = outer + mider + inner + qubit1_dim;
+        IdxType pos3_org = outer + mider + inner + q0dim + q1dim;
+
+        IdxType pos0_gid = (pos0_org & (sim->n_gpus-1));
+        IdxType pos1_gid = (pos1_org & (sim->n_gpus-1));
+        IdxType pos2_gid = (pos2_org & (sim->n_gpus-1));
+        IdxType pos3_gid = (pos3_org & (sim->n_gpus-1));
+
+        IdxType pos0 = (pos0_org >> (sim->gpu_scale));
+        IdxType pos1 = (pos1_org >> (sim->gpu_scale));
+        IdxType pos2 = (pos2_org >> (sim->gpu_scale));
+        IdxType pos3 = (pos3_org >> (sim->gpu_scale));
+
+        const ValType el0_real = sv_real[pos0_gid][pos0]; 
+        const ValType el0_imag = sv_imag[pos0_gid][pos0];
+        const ValType el1_real = sv_real[pos1_gid][pos1]; 
+        const ValType el1_imag = sv_imag[pos1_gid][pos1];
+        const ValType el2_real = sv_real[pos2_gid][pos2]; 
+        const ValType el2_imag = sv_imag[pos2_gid][pos2];
+        const ValType el3_real = sv_real[pos3_gid][pos3]; 
+        const ValType el3_imag = sv_imag[pos3_gid][pos3];
+
+        //Real part
+        sv_real[pos0_gid][pos0] = el0_real;
+        sv_real[pos1_gid][pos1] = el2_real;
+        sv_real[pos2_gid][pos2] = el1_real;
+        sv_real[pos3_gid][pos3] = el3_real;
+
+        //Imag part
+        sv_imag[pos0_gid][pos0] = el0_imag;
+        sv_imag[pos1_gid][pos1] = el2_imag;
+        sv_imag[pos2_gid][pos2] = el1_imag; 
+        sv_imag[pos3_gid][pos3] = el3_imag; 
+    }
+    grid.sync();
+}
+
 //============== Unified 1-qubit Gate ================
 __device__ __inline__ void C1_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, 
         const ValType e0_real, const ValType e0_imag,
@@ -1974,15 +2084,15 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType** sv_real, Val
         const ValType e33_real, const ValType e33_imag,
         const IdxType qubit1, const IdxType qubit2)
 {
-    multi_grid_group grid = this_multi_grid(); 
-    const IdxType q0dim = (1 << max(qubit1, qubit2) );
-    const IdxType q1dim = (1 << min(qubit1, qubit2) );
     assert (qubit1 != qubit2); //Non-cloning
+    multi_grid_group grid = this_multi_grid(); 
+    const IdxType q0dim = ((IdxType)1 << max(qubit1, qubit2) );
+    const IdxType q1dim = ((IdxType)1 << min(qubit1, qubit2) );
     const IdxType outer_factor = ((sim->dim) + q0dim + q0dim - 1) >> (max(qubit1,qubit2)+1);
     const IdxType mider_factor = (q0dim + q1dim + q1dim - 1) >> (min(qubit1,qubit2)+1);
     const IdxType inner_factor = q1dim;
-    const IdxType qubit1_dim = (1 << qubit1);
-    const IdxType qubit2_dim = (1 << qubit2);
+    const IdxType qubit1_dim = ((IdxType)1 << qubit1);
+    const IdxType qubit2_dim = ((IdxType)1 << qubit2);
 
     for (IdxType i = grid.thread_rank(); i < outer_factor * mider_factor * inner_factor; 
             i+=grid.size())
@@ -1995,60 +2105,194 @@ __device__ __inline__ void C2_GATE(const Simulation* sim, ValType** sv_real, Val
         IdxType pos2_org = outer + mider + inner + qubit1_dim;
         IdxType pos3_org = outer + mider + inner + q0dim + q1dim;
 
-        IdxType pos0_gid = (pos0_org >> (sim->lg2_m_gpu));
-        IdxType pos1_gid = (pos1_org >> (sim->lg2_m_gpu));
-        IdxType pos2_gid = (pos2_org >> (sim->lg2_m_gpu));
-        IdxType pos3_gid = (pos3_org >> (sim->lg2_m_gpu));
+        IdxType pos0_gid = (pos0_org & (sim->n_gpus-1));
+        IdxType pos1_gid = (pos1_org & (sim->n_gpus-1));
+        IdxType pos2_gid = (pos2_org & (sim->n_gpus-1));
+        IdxType pos3_gid = (pos3_org & (sim->n_gpus-1));
 
-        IdxType pos0 = (pos0_org & (sim->m_gpu-1UL));
-        IdxType pos1 = (pos1_org & (sim->m_gpu-1UL));
-        IdxType pos2 = (pos2_org & (sim->m_gpu-1UL));
-        IdxType pos3 = (pos3_org & (sim->m_gpu-1UL));
+        IdxType pos0 = (pos0_org >> (sim->gpu_scale));
+        IdxType pos1 = (pos1_org >> (sim->gpu_scale));
+        IdxType pos2 = (pos2_org >> (sim->gpu_scale));
+        IdxType pos3 = (pos3_org >> (sim->gpu_scale));
 
-        const ValType el0_real = sv_real_ptr[pos0_gid][pos0]; 
-        const ValType el0_imag = sv_imag_ptr[pos0_gid][pos0];
-        const ValType el1_real = sv_real_ptr[pos1_gid][pos1]; 
-        const ValType el1_imag = sv_imag_ptr[pos1_gid][pos1];
-        const ValType el2_real = sv_real_ptr[pos2_gid][pos2]; 
-        const ValType el2_imag = sv_imag_ptr[pos2_gid][pos2];
-        const ValType el3_real = sv_real_ptr[pos3_gid][pos3]; 
-        const ValType el3_imag = sv_imag_ptr[pos3_gid][pos3];
+        const ValType el0_real = sv_real[pos0_gid][pos0]; 
+        const ValType el0_imag = sv_imag[pos0_gid][pos0];
+        const ValType el1_real = sv_real[pos1_gid][pos1]; 
+        const ValType el1_imag = sv_imag[pos1_gid][pos1];
+        const ValType el2_real = sv_real[pos2_gid][pos2]; 
+        const ValType el2_imag = sv_imag[pos2_gid][pos2];
+        const ValType el3_real = sv_real[pos3_gid][pos3]; 
+        const ValType el3_imag = sv_imag[pos3_gid][pos3];
 
         //Real part
-        sv_real_ptr[pos0_gid][pos0] = (e00_real * el0_real) - (e00_imag * el0_imag)
+        sv_real[pos0_gid][pos0] = (e00_real * el0_real) - (e00_imag * el0_imag)
             +(e01_real * el1_real) - (e01_imag * el1_imag)
             +(e02_real * el2_real) - (e02_imag * el2_imag)
             +(e03_real * el3_real) - (e03_imag * el3_imag);
-        sv_real_ptr[pos1_gid][pos1] = (e10_real * el0_real) - (e10_imag * el0_imag)
+        sv_real[pos1_gid][pos1] = (e10_real * el0_real) - (e10_imag * el0_imag)
             +(e11_real * el1_real) - (e11_imag * el1_imag)
             +(e12_real * el2_real) - (e12_imag * el2_imag)
             +(e13_real * el3_real) - (e13_imag * el3_imag);
-        sv_real_ptr[pos2_gid][pos2] = (e20_real * el0_real) - (e20_imag * el0_imag)
+        sv_real[pos2_gid][pos2] = (e20_real * el0_real) - (e20_imag * el0_imag)
             +(e21_real * el1_real) - (e21_imag * el1_imag)
             +(e22_real * el2_real) - (e22_imag * el2_imag)
             +(e23_real * el3_real) - (e23_imag * el3_imag);
-        sv_real_ptr[pos3_gid][pos3] = (e30_real * el0_real) - (e30_imag * el0_imag)
+        sv_real[pos3_gid][pos3] = (e30_real * el0_real) - (e30_imag * el0_imag)
             +(e31_real * el1_real) - (e31_imag * el1_imag)
             +(e32_real * el2_real) - (e32_imag * el2_imag)
             +(e33_real * el3_real) - (e33_imag * el3_imag);
         
         //Imag part
-        sv_imag_ptr[pos0_gid][pos0] = (e00_real * el0_imag) + (e00_imag * el0_real)
+        sv_imag[pos0_gid][pos0] = (e00_real * el0_imag) + (e00_imag * el0_real)
             +(e01_real * el1_imag) + (e01_imag * el1_real)
             +(e02_real * el2_imag) + (e02_imag * el2_real)
             +(e03_real * el3_imag) + (e03_imag * el3_real);
-        sv_imag_ptr[pos1_gid][pos1] = (e10_real * el0_imag) + (e10_imag * el0_real)
+        sv_imag[pos1_gid][pos1] = (e10_real * el0_imag) + (e10_imag * el0_real)
             +(e11_real * el1_imag) + (e11_imag * el1_real)
             +(e12_real * el2_imag) + (e12_imag * el2_real)
             +(e13_real * el3_imag) + (e13_imag * el3_real);
-        sv_imag_ptr[pos2_gid][pos2] = (e20_real * el0_imag) + (e20_imag * el0_real)
+        sv_imag[pos2_gid][pos2] = (e20_real * el0_imag) + (e20_imag * el0_real)
             +(e21_real * el1_imag) + (e21_imag * el1_real)
             +(e22_real * el2_imag) + (e22_imag * el2_real)
             +(e23_real * el3_imag) + (e23_imag * el3_real);
-        sv_imag_ptr[pos3_gid][pos3] = (e30_real * el0_imag) + (e30_imag * el0_real)
+        sv_imag[pos3_gid][pos3] = (e30_real * el0_imag) + (e30_imag * el0_real)
             +(e31_real * el1_imag) + (e31_imag * el1_real)
             +(e32_real * el2_imag) + (e32_imag * el2_real)
             +(e33_real * el3_imag) + (e33_imag * el3_real);
+    }
+    grid.sync();
+}
+
+#define DIV2E(x,y) ((x)>>(y))
+#define MOD2E(x,y) ((x)&(((IdxType)1<<(y))-(IdxType)1)) 
+#define EXP2E(x) ((IdxType)1<<(x))
+#define SV8IDX(x) ( ((x>>2)&1)*EXP2E(qubit0) + ((x>>1)&1)*EXP2E(qubit1) + ((x&1)*EXP2E(qubit2)) )
+#define SV16IDX(x) ( ((x>>3)&1)*EXP2E(qubit0) + ((x>>2)&1)*EXP2E(qubit1) + ((x>>1)&1)*EXP2E(qubit2) + ((x&1)*EXP2E(qubit3)) )
+
+//#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1UL)])
+#define PGAS(arr,i) (arr[(i)&(sim->n_gpus-1)][(i)>>(sim->gpu_scale)])
+
+//============== Unified 3-qubit Gate ================
+//gm_real and gm_imag should be put in constant memory
+__device__ __inline__ void C3_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2)
+{
+    multi_grid_group grid = this_multi_grid(); 
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
+
+    //need to sort qubits: min->max: p, q, r
+    const IdxType p = min(min(qubit0, qubit1), qubit2);
+    const IdxType r = max(max(qubit0, qubit1), qubit2);
+    const IdxType q = qubit0 + qubit1 + qubit2 - p - r;
+
+    for (IdxType i = grid.thread_rank(); i < ((sim->dim)>>3); i+=grid.size())
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(r+1);
+        const IdxType term = term3 + term2 + term1 + term0;
+
+        const ValType el_real[8] = { 
+            PGAS(sv_real,term+SV8IDX(0)), PGAS(sv_real,term+SV8IDX(1)),
+            PGAS(sv_real,term+SV8IDX(2)), PGAS(sv_real,term+SV8IDX(3)),
+            PGAS(sv_real,term+SV8IDX(4)), PGAS(sv_real,term+SV8IDX(5)),
+            PGAS(sv_real,term+SV8IDX(6)), PGAS(sv_real,term+SV8IDX(7))
+        };
+        const ValType el_imag[8] = { 
+            PGAS(sv_imag,term+SV8IDX(0)), PGAS(sv_imag,term+SV8IDX(1)),
+            PGAS(sv_imag,term+SV8IDX(2)), PGAS(sv_imag,term+SV8IDX(3)),
+            PGAS(sv_imag,term+SV8IDX(4)), PGAS(sv_imag,term+SV8IDX(5)),
+            PGAS(sv_imag,term+SV8IDX(6)), PGAS(sv_imag,term+SV8IDX(7))
+        };
+        #pragma unroll
+        for (unsigned j=0; j<8; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<8; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*8+k]) - (el_imag[k] * gm_imag[j*8+k]);
+                res_imag += (el_real[k] * gm_imag[j*8+k]) + (el_imag[k] * gm_real[j*8+k]);
+            }
+            PGAS(sv_real, term+SV8IDX(j)) = res_real;
+            PGAS(sv_imag, term+SV8IDX(j)) = res_imag;
+        }
+    }
+    grid.sync();
+}
+
+//============== Unified 4-qubit Gate ================
+//gm_real and gm_imag should be put in constant memory
+__device__ __inline__ void C4_GATE(const Simulation* sim, ValType** sv_real, ValType** sv_imag, 
+        const ValType* gm_real, const ValType* gm_imag, const IdxType qubit0, const IdxType qubit1,
+        const IdxType qubit2, const IdxType qubit3)
+{
+    multi_grid_group grid = this_multi_grid(); 
+    assert (qubit0 != qubit1); //Non-cloning
+    assert (qubit0 != qubit2); //Non-cloning
+    assert (qubit0 != qubit3); //Non-cloning
+    assert (qubit1 != qubit2); //Non-cloning
+    assert (qubit1 != qubit3); //Non-cloning
+    assert (qubit2 != qubit3); //Non-cloning
+
+    //need to sort qubits: min->max: p, q, r, s
+    const IdxType v0 = min(qubit0, qubit1);
+    const IdxType v1 = min(qubit2, qubit3);
+    const IdxType v2 = max(qubit0, qubit1);
+    const IdxType v3 = max(qubit2, qubit3);
+    const IdxType p = min(v0,v1); 
+    const IdxType q = min(min(v2,v3),max(v0,v1)); 
+    const IdxType r = max(min(v2,v3),max(v0,v1)); 
+    const IdxType s = max(v2,v3);
+
+    for (IdxType i = grid.thread_rank(); i < ((sim->dim)>>4); i+=grid.size())
+    {
+        const IdxType term0 = MOD2E(i,p);
+        const IdxType term1 = MOD2E(DIV2E(i,p),q-p-1)*EXP2E(p+1);
+        const IdxType term2 = MOD2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1)*EXP2E(q+1);
+        const IdxType term3 = MOD2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(r+1);
+        const IdxType term4 = DIV2E(DIV2E(DIV2E(DIV2E(i,p),q-p-1),r-q-1),s-r-1)*EXP2E(s+1);
+        const IdxType term = term4 + term3 + term2 + term1 + term0;
+
+        const ValType el_real[16] = { 
+            PGAS(sv_real,term+SV16IDX(0)),  PGAS(sv_real,term+SV16IDX(1)),
+            PGAS(sv_real,term+SV16IDX(2)),  PGAS(sv_real,term+SV16IDX(3)),
+            PGAS(sv_real,term+SV16IDX(4)),  PGAS(sv_real,term+SV16IDX(5)),
+            PGAS(sv_real,term+SV16IDX(6)),  PGAS(sv_real,term+SV16IDX(7)),
+            PGAS(sv_real,term+SV16IDX(8)),  PGAS(sv_real,term+SV16IDX(9)),
+            PGAS(sv_real,term+SV16IDX(10)), PGAS(sv_real,term+SV16IDX(11)),
+            PGAS(sv_real,term+SV16IDX(12)), PGAS(sv_real,term+SV16IDX(13)),
+            PGAS(sv_real,term+SV16IDX(14)), PGAS(sv_real,term+SV16IDX(15))
+        };
+        const ValType el_imag[16] = { 
+            PGAS(sv_imag,term+SV16IDX(0)),  PGAS(sv_imag,term+SV16IDX(1)),
+            PGAS(sv_imag,term+SV16IDX(2)),  PGAS(sv_imag,term+SV16IDX(3)),
+            PGAS(sv_imag,term+SV16IDX(4)),  PGAS(sv_imag,term+SV16IDX(5)),
+            PGAS(sv_imag,term+SV16IDX(6)),  PGAS(sv_imag,term+SV16IDX(7)),
+            PGAS(sv_imag,term+SV16IDX(8)),  PGAS(sv_imag,term+SV16IDX(9)),
+            PGAS(sv_imag,term+SV16IDX(10)), PGAS(sv_imag,term+SV16IDX(11)),
+            PGAS(sv_imag,term+SV16IDX(12)), PGAS(sv_imag,term+SV16IDX(13)),
+            PGAS(sv_imag,term+SV16IDX(14)), PGAS(sv_imag,term+SV16IDX(15))
+        };
+        #pragma unroll
+        for (unsigned j=0; j<16; j++)
+        {
+            ValType res_real = 0;
+            ValType res_imag = 0;
+            #pragma unroll
+            for (unsigned k=0; k<16; k++)
+            {
+                res_real += (el_real[k] * gm_real[j*16+k]) - (el_imag[k] * gm_imag[j*16+k]);
+                res_imag += (el_real[k] * gm_imag[j*16+k]) + (el_imag[k] * gm_real[j*16+k]);
+            }
+            PGAS(sv_real,term+SV16IDX(j)) = res_real;
+            PGAS(sv_imag,term+SV16IDX(j)) = res_imag;
+        }
     }
     grid.sync();
 }
@@ -2069,11 +2313,9 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     IdxType pauli = g->mask;
     const int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-#define PGAS(arr,i) (arr[(i)>>(sim->lg2_m_gpu)][(i)&((sim->m_gpu)-1UL)])
-
     ValType** m_real = sim->m_real;
 
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {
@@ -2088,7 +2330,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
 
-    for (IdxType i = grid.thread_rank(); i<(1UL<<(sim->n_qubits)); i+=grid.size())
+    for (IdxType i = grid.thread_rank(); i<((IdxType)1<<(sim->n_qubits)); i+=grid.size())
     {
         if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
         {
@@ -2322,6 +2564,21 @@ __device__ void ControlledX_OP(const Gate* g, const Simulation* sim, ValType** s
 {
     ControlledX_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
     ControlledX_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+
+    /*
+    if (__popcll(g->mask) == 1)
+    {
+        IdxType control = __ffsll(g->mask)-1;
+        C4_GATE(sim, sv_real, sv_imag, CX_real, CX_imag, control, g->qubit, control+(sim->n_qubits), (g->qubit)+(sim->n_qubits));
+    }
+    else
+    {
+        ControlledX_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+        ControlledX_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+    }
+     */
+ 
+
     
 }
 
@@ -2335,6 +2592,21 @@ __device__ void ControlledZ_OP(const Gate* g, const Simulation* sim, ValType** s
 {
     ControlledZ_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
     ControlledZ_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+
+/*
+    if (__popcll(g->mask) == 1)
+    {
+        IdxType control = __ffsll(g->mask)-1;
+        C4_GATE(sim, sv_real, sv_imag, CZ_real, CZ_imag, control, g->qubit, control+(sim->n_qubits), (g->qubit)+(sim->n_qubits));
+    }
+    else
+    {
+        ControlledZ_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+        ControlledZ_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
+    }
+     */
+ 
+
 }
 
 __device__ void ControlledH_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
@@ -2416,6 +2688,11 @@ __device__ void ControlledAdjointT_OP(const Gate* g, const Simulation* sim, ValT
     ControlledT_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)<<(sim->n_qubits));
 } 
 
+__device__ void SWAP_OP(const Gate* g, const Simulation* sim, ValType** sv_real, ValType** sv_imag)
+{
+    SWAP_GATE(sim, sv_real, sv_imag, g->qubit, g->mask); 
+    SWAP_GATE(sim, sv_real, sv_imag, (g->qubit)+(sim->n_qubits), (g->mask)+(sim->n_qubits));
+} 
 
 
 
@@ -2458,6 +2735,7 @@ __device__ func_t pAdjointS = AdjointS_OP;
 __device__ func_t pAdjointT = AdjointT_OP;
 __device__ func_t pControlledAdjointS = ControlledAdjointS_OP;
 __device__ func_t pControlledAdjointT = ControlledAdjointT_OP;
+__device__ func_t pSwap = SWAP_OP;
 __device__ func_t pMeasure = Measure_GATE;
 //=====================================================================================
 

@@ -81,7 +81,7 @@ public:
     }
     void ReleaseQubit(Qubit Q) override
     {
-        sim->ReleaseQubit(to_qubit(Q));
+        sim->ReleaseQubit();
         nextQubitId--;
         if (nextQubitId == 0) sim->reset();
     }
