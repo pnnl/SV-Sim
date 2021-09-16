@@ -510,8 +510,8 @@ public:
         assert(_n_qubits < N_QUBIT_SLOT);
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(_n_qubits));
-        this->half_dim = (IdxType)1UL<<(_n_qubits-1UL);
+        this->dim = ((IdxType)1<<(_n_qubits));
+        this->half_dim = (IdxType)1<<(_n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
     }
     std::string circuitToString()

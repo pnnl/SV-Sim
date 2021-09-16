@@ -102,7 +102,7 @@ public:
         IdxType mask = 0;
         for (long i=0; i<numControls; i++)
         {
-            mask = mask | (1UL<<to_qubit(controls[i]));
+            mask = mask | ((IdxType)1<<to_qubit(controls[i]));
         }
         return mask;
     }
@@ -182,7 +182,7 @@ public:
                 if (paulis[i] != PauliId_I)
                 {
                     IdxType control = to_qubit(targets[i]);
-                    IdxType mask = 1UL<<control;
+                    IdxType mask = (IdxType)1<<control;
                     sim->ControlledX(target_0, mask);
                 }
             }
@@ -194,7 +194,7 @@ public:
                 if (paulis[i] != PauliId_I)
                 {
                     IdxType control = to_qubit(targets[i]);
-                    IdxType mask = 1UL<<control;
+                    IdxType mask = (IdxType)1<<control;
                     sim->ControlledX(target_0, mask);
                 }
             }
@@ -306,7 +306,7 @@ public:
                 if (paulis[i] != PauliId_I)
                 {
                     IdxType control = to_qubit(Qtargets[i]);
-                    IdxType mask = 1UL<<control;
+                    IdxType mask = (IdxType)1<<control;
                     sim->ControlledX(target_0, mask);
                 }
             }
@@ -319,7 +319,7 @@ public:
                 if (paulis[i] != PauliId_I)
                 {
                     IdxType control = to_qubit(Qtargets[i]);
-                    IdxType mask = 1UL<<control;
+                    IdxType mask = (IdxType)1<<control;
                     sim->ControlledX(target_0, mask);
                 }
             }

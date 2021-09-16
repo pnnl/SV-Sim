@@ -811,12 +811,12 @@ __global__ void simulation_kernel(Simulation* sim)
     //for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work;\
             //i+=blockDim.x*gridDim.x){ \
         //IdxType outer = (i >> qubit); \
-        //IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-        //IdxType offset = (outer << (qubit+1UL)); \
+        //IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+        //IdxType offset = (outer << (qubit+1)); \
         //IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-        //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-        //IdxType pos1_gid = ((offset + inner + (1<<qubit)) >> (sim->lg2_m_gpu));\
-        //IdxType pos1 = ((offset + inner + (1<<qubit)) & (sim->m_gpu-1UL));  
+        //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+        //IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu));\
+        //IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
 
 #define OP_HEAD grid_group grid = this_grid(); \
     const IdxType tid = blockDim.x * blockIdx.x + threadIdx.x; \
@@ -838,14 +838,14 @@ __global__ void simulation_kernel(Simulation* sim)
     //for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work;\
             //i+=blockDim.x*gridDim.x){ \
         //IdxType outer = (i >> qubit); \
-        //IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-        //IdxType offset = (outer << (qubit+1UL)); \
+        //IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+        //IdxType offset = (outer << (qubit+1)); \
         //IdxType pos0_src = offset + inner; \
         //if (((~(pos0_src&mask))&mask) != 0) continue; \
         //IdxType pos0_gid = ((offset + inner) >> (sim->lg2_m_gpu));  \
-        //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1UL)); \
-        //IdxType pos1_gid = ((offset + inner + (1<<qubit)) >> (sim->lg2_m_gpu));\
-        //IdxType pos1 = ((offset + inner + (1<<qubit)) & (sim->m_gpu-1UL));  
+        //IdxType pos0 = ((offset + inner) & (sim->m_gpu-1)); \
+        //IdxType pos1_gid = ((offset + inner + ((IdxType)1<<qubit)) >> (sim->lg2_m_gpu));\
+        //IdxType pos1 = ((offset + inner + ((IdxType)1<<qubit)) & (sim->m_gpu-1));  
 
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
@@ -855,8 +855,8 @@ __global__ void simulation_kernel(Simulation* sim)
     for (IdxType i=(sim->i_gpu)*per_pe_work+tid; i<(sim->i_gpu+1)*per_pe_work;\
             i+=blockDim.x*gridDim.x){ \
         IdxType outer = (i >> qubit); \
-        IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-        IdxType offset = (outer << (qubit+1UL)); \
+        IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+        IdxType offset = (outer << (qubit+1)); \
         IdxType pos0_src = offset + inner; \
         if (((~(pos0_src&mask))&mask) != 0) continue; \
         IdxType pos0_gid = ((offset + inner)&(sim->n_gpus-1));\
@@ -1754,7 +1754,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
 #define BARRIER if(threadIdx.x==0 && blockIdx.x==0) nvshmem_barrier_all(); grid.sync();
 
     ValType * m_real = sim->m_real;
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {

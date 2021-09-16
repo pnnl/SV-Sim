@@ -453,8 +453,8 @@ public:
         assert(_n_qubits < N_QUBIT_SLOT);
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(_n_qubits));
-        this->half_dim = (IdxType)1UL<<(_n_qubits-1UL);
+        this->dim = ((IdxType)1<<(_n_qubits));
+        this->half_dim = (IdxType)1<<(_n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
     }
     std::string circuitToString()
@@ -1389,7 +1389,7 @@ inline void Measure_GATE(const Gate* g, const Simulation* sim, ValType* sv_real,
     //printf("\n");
 
     ValType * m_real = sim->m_real;
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {

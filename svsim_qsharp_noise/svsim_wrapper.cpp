@@ -124,7 +124,7 @@ public:
         IdxType mask = 0;
         for (long i=0; i<numControls; i++)
         {
-            mask = mask | (1UL<<to_qubit(controls[i]));
+            mask = mask | ((IdxType)1<<to_qubit(controls[i]));
         }
         return mask;
     }

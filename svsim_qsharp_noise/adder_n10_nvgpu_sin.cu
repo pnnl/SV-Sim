@@ -21,15 +21,15 @@ using namespace SVSim;
 //You can define circuit module functions as below.
 void majority(Simulation &sim, const IdxType a, const IdxType b, const IdxType c)
 {
-    sim.ControlledX(b,(1UL<<c));
-    sim.ControlledX(a,(1UL<<c));
-    sim.ControlledX(c,((1UL<<a)|(1UL<<b)));
+    sim.ControlledX(b,((IdxType)1<<c));
+    sim.ControlledX(a,((IdxType)1<<c));
+    sim.ControlledX(c,(((IdxType)1<<a)|((IdxType)1<<b)));
 }
 void unmaj(Simulation &sim, const IdxType a, const IdxType b, const IdxType c)
 {
-    sim.ControlledX(c,((1UL<<a)|(1UL<<b)));
-    sim.ControlledX(a,(1UL<<c));
-    sim.ControlledX(b,(1UL<<a));
+    sim.ControlledX(c,(((IdxType)1<<a)|((IdxType)1<<b)));
+    sim.ControlledX(a,((IdxType)1<<c));
+    sim.ControlledX(b,((IdxType)1<<a));
 }
 
 int org_test()
@@ -57,7 +57,7 @@ int org_test()
     majority(sim, 1, 6, 2);
     majority(sim, 2, 7, 3);
     majority(sim, 3, 8, 4);
-    sim.ControlledX(9, (1UL<<4));
+    sim.ControlledX(9, ((IdxType)1<<4));
     unmaj(sim, 3, 8, 4);
     unmaj(sim, 2, 7, 3);
     unmaj(sim, 1, 6, 2);

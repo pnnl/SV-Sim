@@ -686,7 +686,7 @@ public:
 
         IdxType* res_state = new IdxType[repetition];
         memset(res_state, 0, (repetition*sizeof(IdxType)));
-        IdxType sv_num = (1<<n_qubits);
+        IdxType sv_num = ((IdxType)1<<n_qubits);
         ValType* sv_diag_real = NULL;
         ValType* sv_diag_imag = NULL;
         if (i_gpu == 0) SAFE_ALOC_HOST(sv_diag_real, sv_num*sizeof(ValType));

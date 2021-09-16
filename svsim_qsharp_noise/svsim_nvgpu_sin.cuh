@@ -31,7 +31,7 @@
 //#include "noise_gate_BCSZ_0.98.cuh"
 //#include "noise_gate_BCSZ_0.99.cuh"
 
-#include "noise_gate_BCSZ_1_array.cuh"
+//#include "noise_gate_BCSZ_1_array.cuh"
 
 #include "config.hpp"
 
@@ -524,8 +524,8 @@ public:
         //For density matrix, we need double the qubits
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(2*n_qubits));
-        this->half_dim = (IdxType)1UL<<(2*n_qubits-1UL);
+        this->dim = ((IdxType)1<<(2*n_qubits));
+        this->half_dim = (IdxType)1<<(2*n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
     }
     std::string circuitToString()
@@ -682,10 +682,10 @@ __global__ void simulation_kernel(Simulation* sim)
         for (IdxType i=tid; i<(sim->half_dim);\
                 i+=blockDim.x*gridDim.x){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
             IdxType pos0 = offset + inner; \
-            IdxType pos1 = pos0 + (1UL<<qubit); 
+            IdxType pos1 = pos0 + ((IdxType)1<<qubit); 
 
 //Define MG-BSP machine operation header with a mask for multi-controlled gates
 #define OP_HEAD_MASK grid_group grid = this_grid(); \
@@ -693,10 +693,10 @@ __global__ void simulation_kernel(Simulation* sim)
         for (IdxType i=tid; i<(sim->half_dim);\
                 i+=blockDim.x*gridDim.x){ \
             IdxType outer = (i >> qubit); \
-            IdxType inner =  (i & ((1UL<<qubit)-1UL)); \
-            IdxType offset = (outer << (qubit+1UL)); \
+            IdxType inner =  (i & (((IdxType)1<<qubit)-1)); \
+            IdxType offset = (outer << (qubit+1)); \
             IdxType pos0 = offset + inner; \
-            IdxType pos1 = pos0 + (1UL<<qubit); \
+            IdxType pos1 = pos0 + ((IdxType)1<<qubit); \
             if (((~(pos0&mask))&mask) != 0) continue; 
 
 //Define MG-BSP machine operation footer
@@ -1965,7 +1965,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
     const int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
     ValType * m_real = sim->m_real;
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {
@@ -1980,7 +1980,7 @@ __device__ __inline__ void Measure_GATE(const Gate* g, const Simulation* sim, Va
         H_GATE(sim, sv_real, sv_imag, sim->n_qubits+qubit);
     }
 
-    for (IdxType i = tid; i<(1UL<<(sim->n_qubits)); i+=blockDim.x*gridDim.x)
+    for (IdxType i = tid; i<((IdxType)1<<(sim->n_qubits)); i+=blockDim.x*gridDim.x)
     {
         if ( (i & mask) == 0) //for all conditions with qubit=0, we set it to 0, so we sum up all prob that qubit=1
         {

@@ -43,7 +43,7 @@ bool check_sv(Simulation& sim, ValType* sv_real_expected,
 bool test_X()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -60,7 +60,7 @@ bool test_X()
 bool test_Y()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -78,7 +78,7 @@ bool test_Y()
 bool test_Z()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -97,7 +97,7 @@ bool test_Z()
 bool test_H()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -115,7 +115,7 @@ bool test_H()
 bool test_S()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -135,7 +135,7 @@ bool test_S()
 bool test_SDG()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -154,7 +154,7 @@ bool test_SDG()
 bool test_T()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -173,7 +173,7 @@ bool test_T()
 bool test_TDG()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -192,7 +192,7 @@ bool test_TDG()
 bool test_RI()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -212,7 +212,7 @@ bool test_RI()
 bool test_RX()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -231,7 +231,7 @@ bool test_RX()
 bool test_RY()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -251,7 +251,7 @@ bool test_RY()
 bool test_RZ()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -271,7 +271,7 @@ bool test_RZ()
 bool test_EI()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -291,7 +291,7 @@ bool test_EI()
 bool test_EX()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -312,7 +312,7 @@ bool test_EX()
 bool test_EY()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -334,7 +334,7 @@ bool test_EY()
 bool test_EZ()
 {
     const int n_qubits = 1;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
@@ -357,13 +357,13 @@ bool test_EZ()
 bool test_CX()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledX(1,(1UL<<0));
+    sim.ControlledX(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0,0,0.5, 0,0,0,0, 0,0,0,0, 0.5,0,0,0.5};
@@ -378,13 +378,13 @@ bool test_CX()
 bool test_CY()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledY(1,(1UL<<0));
+    sim.ControlledY(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0,0,0, 0,0,0,0, 0,0,0,0, 0.0,0,0,0.5};
@@ -398,13 +398,13 @@ bool test_CY()
 bool test_CZ()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledZ(1,(1UL<<0));
+    sim.ControlledZ(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.5,0,0, 0.5,0.5,0,0, 0,0,0,0, 0.0,0,0,0};
@@ -418,13 +418,13 @@ bool test_CZ()
 bool test_CH()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledH(1,(1UL<<0));
+    sim.ControlledH(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.353553,0,0.353553, 0.353553,0.25,0,0.25, 0,0,0,0, 0.353553,0.25,0,0.25};
@@ -438,13 +438,13 @@ bool test_CH()
 bool test_CS()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledS(1,(1UL<<0));
+    sim.ControlledS(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.5,0,0, 0.5,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -458,13 +458,13 @@ bool test_CS()
 bool test_CT()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledT(1,(1UL<<0));
+    sim.ControlledT(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.5,0,0, 0.5,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -478,13 +478,13 @@ bool test_CT()
 bool test_CAS()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledAdjointS(1,(1UL<<0));
+    sim.ControlledAdjointS(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.5,0,0, 0.5,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -498,13 +498,13 @@ bool test_CAS()
 bool test_CAT()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledAdjointT(1,(1UL<<0));
+    sim.ControlledAdjointT(1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.5,0,0, 0.5,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -519,13 +519,13 @@ bool test_CAT()
 bool test_CRI()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledRI(PI/3.,1,(1UL<<0));
+    sim.ControlledRI(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.433013,0,0, 0.433013,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -539,13 +539,13 @@ bool test_CRI()
 bool test_CRX()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledRX(PI/3.,1,(1UL<<0));
+    sim.ControlledRX(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.433013,0,0, 0.433013,0.375,0,0, 0,0,0,0, 0,0,0,0.125};
@@ -559,13 +559,13 @@ bool test_CRX()
 bool test_CRY()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledRY(PI/3.,1,(1UL<<0));
+    sim.ControlledRY(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.433013,0,0.25, 0.433013,0.375,0,0.216506, 0,0,0,0, 0.25,0.216506,0,0.125};
@@ -579,13 +579,13 @@ bool test_CRY()
 bool test_CRZ()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledRZ(PI/3.,1,(1UL<<0));
+    sim.ControlledRZ(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.433013,0,0, 0.433013,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -599,13 +599,13 @@ bool test_CRZ()
 bool test_CEI()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledEI(PI/3.,1,(1UL<<0));
+    sim.ControlledEI(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.25,0,0, 0.25,0.5,0,0, 0,0,0,0, 0,0,0,0};
@@ -619,13 +619,13 @@ bool test_CEI()
 bool test_CEX()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledEX(PI/3.,1,(1UL<<0));
+    sim.ControlledEX(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.25,0,0, 0.25,0.125,0,0, 0,0,0,0, 0,0,0,0.375};
@@ -639,13 +639,13 @@ bool test_CEX()
 bool test_CEY()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledEY(PI/3.,1,(1UL<<0));
+    sim.ControlledEY(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.25,0,-0.433013, 0.25,0.125,0,-0.216506, 0,0,0,0, -0.433013,-0.216506,0,0.375};
@@ -659,13 +659,13 @@ bool test_CEY()
 bool test_CEZ()
 {
     const int n_qubits = 2;
-    const int dim = (1<<(2*n_qubits));
+    const int dim = ((IdxType)1<<(2*n_qubits));
     bool pass = true;
     Simulation sim;
     sim.AllocateQubit();
     sim.AllocateQubit();
     sim.H(0);
-    sim.ControlledEZ(PI/3.,1,(1UL<<0));
+    sim.ControlledEZ(PI/3.,1,((IdxType)1<<0));
     sim.sim();
     //sim.print_res_sv();
     ValType sv_real_expected[dim] = {0.5,0.25,0,0, 0.25,0.50,0, 0,0,0,0, 0,0,0,0};

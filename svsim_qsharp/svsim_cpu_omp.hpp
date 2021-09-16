@@ -124,6 +124,7 @@ public:
     void exe_op(Simulation* sim, ValType* sv_real, ValType* sv_imag)
     {
         (*(this->op))(this, sim, sv_real, sv_imag);
+        #pragma omp barrier
     }
     //for dumping the gate
     void gateToString(std::stringstream& ss)
@@ -453,8 +454,8 @@ public:
         assert(_n_qubits < N_QUBIT_SLOT);
         this->n_qubits = _n_qubits;
         this->n_gates = _n_gates;
-        this->dim = ((IdxType)1UL<<(_n_qubits));
-        this->half_dim = (IdxType)1UL<<(_n_qubits-1UL);
+        this->dim = ((IdxType)1<<(_n_qubits));
+        this->half_dim = (IdxType)1<<(_n_qubits-1);
         this->sv_size = dim*(IdxType)sizeof(ValType);
     }
     std::string circuitToString()
@@ -585,7 +586,9 @@ void simulation_kernel(Simulation* sim)
 #ifndef USE_AVX512 //Without AVX512 Acceleration
 
 //Define MG-BSP machine operation footer
-#define OP_TAIL } _Pragma("omp barrier")  
+//#define OP_TAIL } _Pragma("omp barrier")  
+#define OP_TAIL } 
+
 
 //Define MG-BSP machine operation header (Optimized version)
 #define OP_HEAD \
@@ -1412,7 +1415,7 @@ inline void Measure_GATE(const Gate* g, const Simulation* sim, ValType* sv_real,
     //printf("\n");
 
     ValType * m_real = sim->m_real;
-    IdxType mask = (1UL<<qubit);
+    IdxType mask = ((IdxType)1<<qubit);
 
     if (pauli == 1)
     {
