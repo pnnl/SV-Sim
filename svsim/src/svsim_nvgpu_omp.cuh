@@ -1336,14 +1336,14 @@ __device__ __inline__ void CRZ_GATE(const Simulation* sim, ValType** sv_real_ptr
 __device__ __inline__ void CU1_GATE(const Simulation* sim, ValType** sv_real_ptr, ValType** sv_imag_ptr,
         const ValType lambda, const IdxType a, const IdxType b)
 {
-    U1_GATE(sim, sv_real_ptr, sv_imag_ptr, lambda/2, b);
+    U1_GATE(sim, sv_real_ptr, sv_imag_ptr, lambda/2, a);
     CX_GATE(sim, sv_real_ptr, sv_imag_ptr, a, b);
     U1_GATE(sim, sv_real_ptr, sv_imag_ptr, -lambda/2, b);
     CX_GATE(sim, sv_real_ptr, sv_imag_ptr, a, b);
     U1_GATE(sim, sv_real_ptr, sv_imag_ptr, lambda/2, b);
 }
 
-//============== CU1 Gate ================
+//============== CU3 Gate ================
 //Controlled U
 __device__ __inline__ void CU3_GATE(const Simulation* sim, ValType** sv_real_ptr, ValType** sv_imag_ptr,
         const ValType theta, const ValType phi, const ValType lambda, 
@@ -1352,6 +1352,7 @@ __device__ __inline__ void CU3_GATE(const Simulation* sim, ValType** sv_real_ptr
     ValType temp1 = (lambda-phi)/2;
     ValType temp2 = theta/2;
     ValType temp3 = -(phi+lambda)/2;
+    U1_GATE(sim, sv_real, sv_imag, -temp3, c);
     U1_GATE(sim, sv_real_ptr, sv_imag_ptr, temp1, t);
     CX_GATE(sim, sv_real_ptr, sv_imag_ptr, c, t);
     U3_GATE(sim, sv_real_ptr, sv_imag_ptr, -temp2, 0, temp3, t);

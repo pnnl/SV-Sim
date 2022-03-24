@@ -2433,14 +2433,14 @@ void CRZ_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag,
 void CU1_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag,
         const ValType lambda, const IdxType a, const IdxType b)
 {
-    U1_GATE(sim, sv_real, sv_imag, lambda/2, b);
+    U1_GATE(sim, sv_real, sv_imag, lambda/2, a);
     CX_GATE(sim, sv_real, sv_imag, a, b);
     U1_GATE(sim, sv_real, sv_imag, -lambda/2, b);
     CX_GATE(sim, sv_real, sv_imag, a, b);
     U1_GATE(sim, sv_real, sv_imag, lambda/2, b);
 }
 
-//============== CU1 Gate ================
+//============== CU3 Gate ================
 //Controlled U
 void CU3_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag,
         const ValType theta, const ValType phi, const ValType lambda, 
@@ -2449,6 +2449,7 @@ void CU3_GATE(const Simulation* sim, ValType* sv_real, ValType* sv_imag,
     ValType temp1 = (lambda-phi)/2;
     ValType temp2 = theta/2;
     ValType temp3 = -(phi+lambda)/2;
+    U1_GATE(sim, sv_real, sv_imag, -temp3, c);
     U1_GATE(sim, sv_real, sv_imag, temp1, t);
     CX_GATE(sim, sv_real, sv_imag, c, t);
     U3_GATE(sim, sv_real, sv_imag, -temp2, 0, temp3, t);
