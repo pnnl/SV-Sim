@@ -1360,7 +1360,7 @@ __device__ void CU3_GATE(const Simulation* sim, ValType** sv_real_ptr, ValType**
     ValType temp1 = (lambda-phi)/2;
     ValType temp2 = theta/2;
     ValType temp3 = -(phi+lambda)/2;
-    U1_GATE(sim, sv_real, sv_imag, -temp3, c);
+    U1_GATE(sim, sv_real_ptr, sv_imag_ptr, -temp3, c);
     U1_GATE(sim, sv_real_ptr, sv_imag_ptr, temp1, t);
     CX_GATE(sim, sv_real_ptr, sv_imag_ptr, c, t);
     U3_GATE(sim, sv_real_ptr, sv_imag_ptr, -temp2, 0, temp3, t);
