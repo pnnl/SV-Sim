@@ -1,4 +1,4 @@
-# SV-Sim: State Vector Quantum Circuit Simulation Environment (Merged in [NWQSim](https://github.com/pnnl/nwq-sim)
+# SV-Sim: State Vector Quantum Circuit Simulation Environment (Merged in [NWQSim](https://github.com/pnnl/nwq-sim))
 
 A State Vector Quantum Simulation Environment based on PGAS model for single-GPU/CPU, single-node-multi-GPUs/CPUs and multi-nodes GPU/CPU clusters. It supports Intel/AMD/IBM CPUs, NVIDIA/AMD GPUs and Xeon-Phi. It has been tested on OLCF Summit and Spock, ALCF Theta, NERSC Cori, DGX-2 and DGX-A100. Please see our SuperComputing (SC-21) [paper](doc/paper_sc21.pdf) for details. 
 
